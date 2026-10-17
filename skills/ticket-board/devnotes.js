@@ -1,12 +1,14 @@
-// Sblurp dev notes: shift+click any element to file a ticket on the board.
+// Dev notes: shift+click any element to file a ticket on the board.
 // Loaded in dev only. Everything renders inside one Shadow DOM root, and the
-// only global is window.SblurpDevnotes.
+// only global is window.Devnotes.
 (() => {
-  if (window.SblurpDevnotes) return;
+  if (window.Devnotes) return;
   const BOARD = (() => { try { return new URL(document.currentScript.src).origin; } catch { return "http://localhost:8090"; } })();
+  // <script data-area="web" ...> sets the area of new notes; otherwise the board picks its first area.
+  const AREA = document.currentScript?.dataset.area || undefined;
   const store = {
-    get(k) { try { return localStorage.getItem("sblurp.devnotes." + k); } catch { return null; } },
-    set(k, v) { try { localStorage.setItem("sblurp.devnotes." + k, v); } catch {} },
+    get(k) { try { return localStorage.getItem("devnotes." + k); } catch { return null; } },
+    set(k, v) { try { localStorage.setItem("devnotes." + k, v); } catch {} },
   };
 
   // ---- pure helpers ----
@@ -38,12 +40,6 @@
     }
     return parts.join(" > ");
   }
-  function guessArea(port, path) {
-    if (port === "5173") return "web";
-    if (port === "8090") return "tickets";
-    if (port === "8081") return /^\/(login|logout|signup|sign-in|sign-up|oauth|authorize|auth|account|consent|passkey|settings|verify)/.test(path) ? "auth" : "marketing";
-    return "infra";
-  }
   function parseNote(text, feature) {
     const lines = text.trim().split("\n");
     let title = lines[0].trim(), type = feature ? "feature" : "bug";
@@ -70,14 +66,14 @@
   }
 
   // ---- shadow root ----
-  const host = document.createElement("sblurp-devnotes");
+  const host = document.createElement("dev-notes");
   host.style.cssText = "all:initial;position:fixed;inset:0;pointer-events:none;z-index:2147483647;display:block;";
   const root = host.attachShadow({ mode: "open" });
   root.innerHTML = `<style>
 :host { --on:#fff; --ink:#1A1C2B; --paper:#fff; --note:#DCE2FD; --raspberry:#3550F0; --cherry:#E8344E; --graphite:#5D6274; --line:#C9D1F5; --text:#1A1C2B; }
 @media (prefers-color-scheme: dark) { :host { --paper:#1D1F2D; --note:#262D55; --raspberry:#6F82FF; --cherry:#FF5A70; --graphite:#A3A8BC; --line:#3A4272; --text:#E7E9F2; --on:#0F1019; } }
 * { box-sizing: border-box; }
-div, button, a, textarea, select, label { font: 500 13px/1.4 "Schibsted Grotesk", system-ui, -apple-system, sans-serif; color: var(--text); }
+div, button, a, textarea, select, label { font: 500 13px/1.4 system-ui, -apple-system, sans-serif; color: var(--text); }
 button { cursor: pointer; }
 :focus-visible { outline: 2px solid var(--raspberry); outline-offset: 2px; }
 [hidden] { display: none !important; }
@@ -96,7 +92,7 @@ button { cursor: pointer; }
 .err { color: var(--cherry); font-size: 12px; margin-top: 6px; }
 .pin { min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px 11px 11px 3px; border: 2px solid #fff; background: var(--raspberry); color: #fff; font-weight: 700; font-size: 11px; box-shadow: 0 2px 6px rgba(15,16,25,.3); }
 #card { width: 300px; background: var(--paper); border-radius: 12px; border: 1px solid var(--line); box-shadow: 0 10px 30px rgba(15,16,25,.22); padding: 12px; }
-#card h4 { margin: 0 0 4px; font: 700 14px/1.35 "Schibsted Grotesk", system-ui, sans-serif; color: var(--text); }
+#card h4 { margin: 0 0 4px; font: 700 14px/1.35 system-ui, sans-serif; color: var(--text); }
 #card .meta { color: var(--graphite); font-size: 12px; }
 #card .body { margin-top: 8px; max-height: 120px; overflow: auto; white-space: pre-wrap; }
 #card select, #card textarea { width: 100%; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); padding: 5px 8px; }
@@ -144,7 +140,6 @@ kbd { font: 600 11px/1 ui-monospace, monospace; border: 1px solid var(--line); b
   let notes = [];
   let target = null, feature = false, stream = null, mx = 0, my = 0;
   const inOverlay = (e) => e.composedPath().includes(host);
-  const pageArea = () => guessArea(location.port, location.pathname);
 
   // ---- highlight ----
   function highlight(el) {
@@ -216,7 +211,7 @@ kbd { font: 600 11px/1 ui-monospace, monospace; border: 1px solid var(--line); b
     if ((!text.trim() && !queued.length) || !target) return;
     const n = parseNote(text, feature), el = target, rect = el.getBoundingClientRect(), files = queued;
     const ticket = {
-      title: n.title || "Screenshot", body: n.body, type: n.type, status: "inbox", priority: "p2", area: pageArea(), source: "devnote",
+      title: n.title || "Screenshot", body: n.body, type: n.type, status: "inbox", priority: "p2", area: AREA, source: "devnote",
       url: location.href, selector: selectorFor(el), element_text: elementText(el), viewport: innerWidth + "x" + innerHeight,
     };
     $("note").hidden = true;
@@ -237,8 +232,8 @@ kbd { font: 600 11px/1 ui-monospace, monospace; border: 1px solid var(--line); b
     }
   }
 
-  // Screenshots: getDisplayMedia asks permission, so it only runs when Ian
-  // turns it on. The stream is kept for the session so he is asked once.
+  // Screenshots: getDisplayMedia asks permission, so it only runs when the
+  // user turns it on. The stream is kept for the session so they are asked once.
   const within = (p, ms) => Promise.race([p, new Promise((r) => setTimeout(r, ms))]);
   async function grab(rect) {
     if (!stream || !stream.active) {
@@ -343,7 +338,7 @@ kbd { font: 600 11px/1 ui-monospace, monospace; border: 1px solid var(--line); b
     };
     add.onclick = async () => {
       if (!note.value.trim()) return;
-      try { await api("POST", `/api/tickets/${t.id}/notes`, { text: note.value, by: "ian" }); note.value = ""; add.textContent = "Added"; setTimeout(() => { add.textContent = "Add note"; }, 1500); } catch (e) { fail(e); }
+      try { await api("POST", `/api/tickets/${t.id}/notes`, { text: note.value, by: "human" }); note.value = ""; add.textContent = "Added"; setTimeout(() => { add.textContent = "Add note"; }, 1500); } catch (e) { fail(e); }
     };
     c.hidden = false;
     const p = place(pin.getBoundingClientRect(), 300, c.offsetHeight, innerWidth, innerHeight);
@@ -428,5 +423,5 @@ kbd { font: 600 11px/1 ui-monospace, monospace; border: 1px solid var(--line); b
   }
   if (document.body) mount(); else addEventListener("DOMContentLoaded", mount);
 
-  window.SblurpDevnotes = { board: BOARD, toggle: () => setEnabled(!enabled), reload: loadPins, _: { selectorFor, guessArea, parseNote, place } };
+  window.Devnotes = { board: BOARD, toggle: () => setEnabled(!enabled), reload: loadPins, _: { selectorFor, parseNote, place } };
 })();

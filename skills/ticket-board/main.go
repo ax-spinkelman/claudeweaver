@@ -1,4 +1,4 @@
-// Command tickets serves Sblurp's ticket board and the dev-mode sticky-note
+// Command ticket-board serves a ticket board and the dev-mode sticky-note
 // overlay, and doubles as a CLI. Ticket files in -dir are the source of truth.
 package main
 
@@ -32,15 +32,17 @@ const maxScreenshot = 5 << 20
 func main() {
 	if len(os.Args) > 1 && !strings.HasPrefix(os.Args[1], "-") {
 		if err := runCLI(os.Args[1:], os.Stdin, os.Stdout); err != nil {
-			fmt.Fprintln(os.Stderr, "tickets:", err)
+			fmt.Fprintln(os.Stderr, "ticket-board:", err)
 			os.Exit(1)
 		}
 		return
 	}
 	addr := flag.String("addr", ":8090", "listen address; an empty host means loopback only")
-	dir := flag.String("dir", defaultDir(), "tickets directory")
+	dir := flag.String("dir", "tickets", "tickets directory")
+	areas := flag.String("areas", strings.Join(Areas, ","), "comma-separated list of allowed areas")
 	unsafeAny := flag.Bool("unsafe-listen-any", false, "allow a non-loopback listen address (no auth!)")
 	flag.Parse()
+	setAreas(*areas)
 
 	addrs, err := listenAddrs(*addr, *unsafeAny)
 	if err != nil {
@@ -56,20 +58,23 @@ func main() {
 			}
 			log.Fatal(err)
 		}
-		log.Printf("tickets board on http://%s (dir %s)", ln.Addr(), *dir)
+		log.Printf("ticket board on http://%s (dir %s)", ln.Addr(), *dir)
 		go func() { errc <- http.Serve(ln, h) }()
 	}
 	log.Fatal(<-errc)
 }
 
-// defaultDir finds tickets/ from the repo root or from tools/tickets.
-func defaultDir() string {
-	for _, d := range []string{"tickets", "../../tickets"} {
-		if fi, err := os.Stat(d); err == nil && fi.IsDir() {
-			return d
+// setAreas replaces Areas with a comma list; an empty list keeps the default.
+func setAreas(list string) {
+	var a []string
+	for _, s := range strings.Split(list, ",") {
+		if s = strings.TrimSpace(s); s != "" {
+			a = append(a, s)
 		}
 	}
-	return "tickets"
+	if len(a) > 0 {
+		Areas = a
+	}
 }
 
 // listenAddrs maps -addr to the addresses to bind. An empty host or
@@ -368,16 +373,18 @@ func age(ts string, now time.Time) string {
 // ---- CLI ----
 
 const usage = `usage:
-  tickets ls [--status todo] [--area web]
-  tickets show <id>
-  tickets new --title "..." [--type bug] [--area web] [--priority p2] [--status todo] [--body - | --body "text"]
-  tickets mv <id> <status>
-  tickets note <id> "text" [--by name]
-  tickets [-addr :8090] [-dir tickets]     (serve the board)`
+  ticket-board ls [--status todo] [--area web]
+  ticket-board show <id>
+  ticket-board new --title "..." [--type bug] [--area web] [--priority p2] [--status todo] [--body - | --body "text"]
+  ticket-board mv <id> <status>
+  ticket-board note <id> "text" [--by name]
+  ticket-board [-addr :8090] [-dir tickets] [-areas web,server,docs,infra]     (serve the board)
+All commands take --dir and --areas.`
 
 func runCLI(args []string, stdin io.Reader, out io.Writer) error {
 	fs := flag.NewFlagSet(args[0], flag.ContinueOnError)
-	dir := fs.String("dir", defaultDir(), "tickets directory")
+	dir := fs.String("dir", "tickets", "tickets directory")
+	areas := fs.String("areas", "", "comma-separated list of allowed areas")
 	status := fs.String("status", "", "")
 	area := fs.String("area", "", "")
 	title := fs.String("title", "", "")
@@ -399,6 +406,7 @@ func runCLI(args []string, stdin io.Reader, out io.Writer) error {
 		pos = append(pos, fs.Arg(0))
 		rest = fs.Args()[1:]
 	}
+	setAreas(*areas)
 	st := NewStore(*dir)
 	needID := func(n int) (int, error) {
 		if len(pos) != n {

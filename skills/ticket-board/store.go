@@ -16,17 +16,17 @@ import (
 	"time"
 )
 
-// Enumerations from docs/TICKETS.md. Reads accept any value; writes through
-// the tool are validated against these.
+// Allowed values. Reads accept any value; writes through the tool are
+// validated against these. Areas is set by the -areas flag.
 var (
 	Statuses   = []string{"inbox", "todo", "doing", "review", "done", "wontfix"}
 	Types      = []string{"bug", "feature", "chore"}
 	Priorities = []string{"p1", "p2", "p3"}
-	Areas      = []string{"web", "server", "auth", "marketing", "tickets", "infra"}
-	Sources    = []string{"devnote", "ian", "agent"}
+	Areas      = []string{"web", "server", "docs", "infra"}
+	Sources    = []string{"devnote", "human", "agent"}
 )
 
-// MinToolID is the lowest id the tool hands out. Agents own 100-399 for now.
+// MinToolID is the lowest id the tool hands out. Lower ids are free for hand-made tickets.
 const MinToolID = 1000
 
 // Ticket is the JSON view of one ticket file.
@@ -496,8 +496,8 @@ func (s *Store) Create(n NewTicket) (Ticket, error) {
 	def(&n.Type, "bug")
 	def(&n.Status, "inbox")
 	def(&n.Priority, "p2")
-	def(&n.Area, "infra")
-	def(&n.Source, "ian")
+	def(&n.Area, Areas[0])
+	def(&n.Source, "human")
 	var err error
 	if n.Title, err = cleanTitle(n.Title); err != nil {
 		return Ticket{}, err

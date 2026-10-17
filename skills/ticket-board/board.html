@@ -3,10 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Sblurp tickets</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<title>Tickets</title>
 <style>
 :root {
   --ink: #1A1C2B; --frost: #EEF1F6; --paper: #FFFFFF; --raspberry: #3550F0; --cherry: #E8344E;
@@ -28,10 +25,10 @@
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
-body { background: var(--page); color: var(--text); font: 15px/1.47 "Schibsted Grotesk", system-ui, sans-serif; display: flex; flex-direction: column; }
+body { background: var(--page); color: var(--text); font: 15px/1.47 system-ui, sans-serif; display: flex; flex-direction: column; }
 button, input, select, textarea { font: inherit; color: inherit; }
 :focus-visible { outline: 2px solid var(--raspberry); outline-offset: 2px; }
-code, .mono { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 13px; }
+code, .mono { font-family: ui-monospace, monospace; font-size: 13px; }
 a { color: var(--raspberry); }
 
 header { display: flex; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--line); background: var(--paper); flex-wrap: wrap; }
@@ -115,7 +112,7 @@ textarea.field { height: auto; min-height: 160px; padding: 10px; resize: vertica
 #lightbox { padding: 0; border: 0; background: transparent; max-width: 94vw; max-height: 94vh; cursor: zoom-out; }
 #lightbox img { display: block; max-width: 94vw; max-height: 94vh; border-radius: 8px; }
 #lightbox::backdrop { background: rgba(15,16,25,.72); }
-kbd { font: 500 11px "JetBrains Mono", ui-monospace, monospace; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; background: var(--paper); }
+kbd { font: 500 11px ui-monospace, monospace; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; background: var(--paper); }
 .hint { color: var(--graphite); font-size: 12px; padding: 0 20px 12px; }
 @media (max-width: 720px) {
   header { padding: 12px 16px; }
@@ -251,7 +248,7 @@ kbd { font: 500 11px "JetBrains Mono", ui-monospace, monospace; border: 1px soli
   function closeQuick() { quick.hidden = true; qin.value = ""; $("#quick-msg").textContent = ""; qin.blur(); }
   // "feat: Rail jumps p1 #web" -> {type: feature, priority: p1, area: web, title: "Rail jumps"}
   function parseQuick(s) {
-    const t = { type: "bug", priority: "p2", area: $("#f-area").value || "web" };
+    const t = { type: "bug", priority: "p2", area: $("#f-area").value || AREAS[0] };
     const m = s.match(/^\s*(feat|feature|bug|chore)\s*:\s*/i);
     if (m) { t.type = { feat: "feature", feature: "feature" }[m[1].toLowerCase()] || m[1].toLowerCase(); s = s.slice(m[0].length); }
     s = s.replace(/(^|\s)(p[1-3])(?=\s|$)/i, (_, a, p) => { t.priority = p.toLowerCase(); return a; });
@@ -519,7 +516,7 @@ kbd { font: 500 11px "JetBrains Mono", ui-monospace, monospace; border: 1px soli
   });
   $("#p-addnote").onclick = async () => {
     const text = $("#p-note").value.trim(); if (!text || !current) return;
-    try { const t = await api("POST", `/api/tickets/${current}/notes`, { text, by: "ian" }); $("#p-note").value = ""; $("#p-notes").innerHTML = md(t.notes); }
+    try { const t = await api("POST", `/api/tickets/${current}/notes`, { text, by: "human" }); $("#p-note").value = ""; $("#p-notes").innerHTML = md(t.notes); }
     catch (err) { msg(err.message, true); }
   };
 

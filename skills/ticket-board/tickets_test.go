@@ -111,11 +111,11 @@ func TestUpdateKeepsEverythingElse(t *testing.T) {
 	if _, err := s.Update(150, Patch{Body: &b}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.AddNote(150, "second\nline two", "ian"); err != nil {
+	if _, err := s.AddNote(150, "second\nline two", "human"); err != nil {
 		t.Fatal(err)
 	}
 	got := readFile(t, s, "0150-rail.md")
-	wantTail := "---\n\nNew body.\n\n## Notes\n\n- earlier note\n\n- 2026-10-17 09:30Z (ian): second\n  line two\n"
+	wantTail := "---\n\nNew body.\n\n## Notes\n\n- earlier note\n\n- 2026-10-17 09:30Z (human): second\n  line two\n"
 	if !strings.HasSuffix(got, wantTail) {
 		t.Fatalf("body/notes wrong:\n%s", got)
 	}
@@ -180,6 +180,22 @@ Line
 	}
 	if _, err := s.Create(NewTicket{Title: "x", Area: "nowhere"}); err == nil {
 		t.Fatal("bad area accepted")
+	}
+}
+
+func TestSetAreas(t *testing.T) {
+	defer func(a []string) { Areas = a }(Areas)
+	setAreas(" ios, api ,,")
+	s := fixedStore(t)
+	if tk, err := s.Create(NewTicket{Title: "x"}); err != nil || tk.Area != "ios" {
+		t.Fatalf("default area: %+v %v", tk, err)
+	}
+	if _, err := s.Create(NewTicket{Title: "x", Area: "web"}); err == nil {
+		t.Fatal("area outside -areas accepted")
+	}
+	setAreas("")
+	if len(Areas) != 2 || Areas[1] != "api" {
+		t.Fatalf("empty list changed areas: %v", Areas)
 	}
 }
 
@@ -264,7 +280,7 @@ func TestAPI(t *testing.T) {
 	if w := do(h, "PATCH", "/api/tickets/999", "", `{"status":"todo"}`); w.Code != 404 {
 		t.Errorf("missing ticket: %d", w.Code)
 	}
-	if w := do(h, "POST", "/api/tickets/1000/notes", "", `{"text":"hello","by":"ian"}`); w.Code != 200 || !strings.Contains(w.Body.String(), "(ian): hello") {
+	if w := do(h, "POST", "/api/tickets/1000/notes", "", `{"text":"hello","by":"human"}`); w.Code != 200 || !strings.Contains(w.Body.String(), "(human): hello") {
 		t.Errorf("note: %d %s", w.Code, w.Body)
 	}
 
@@ -311,7 +327,7 @@ EVENT screenshot #1000 tickets/assets/1000.png
 func TestCORSAndHosts(t *testing.T) {
 	for o, want := range map[string]bool{
 		"http://localhost:5173": true, "http://127.0.0.1:8081": true, "http://localhost": true,
-		"http://app.sblurp.localhost:1355": true, "http://evil.localhost.com": false,
+		"http://app.myapp.localhost:1355": true, "http://evil.localhost.com": false,
 		"https://localhost:5173": false, "http://localhost.evil.com": false, "http://evil.com": false,
 		"http://127.0.0.1.nip.io:80": false, "null": false, "http://user@localhost:1": false,
 	} {
@@ -335,7 +351,7 @@ func TestCORSAndHosts(t *testing.T) {
 	if rw.Code != 403 {
 		t.Fatalf("rebinding host got %d", rw.Code)
 	}
-	r.Host = "tickets.sblurp.localhost:1355"
+	r.Host = "tickets.myapp.localhost:1355"
 	rw = httptest.NewRecorder()
 	h.ServeHTTP(rw, r)
 	if rw.Code != 200 {
