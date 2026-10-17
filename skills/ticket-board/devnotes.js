@@ -55,6 +55,16 @@
   }
   const elementText = (el) => (el.innerText || el.textContent || el.getAttribute("aria-label") || el.getAttribute("alt") || el.value || "").replace(/\s+/g, " ").trim().slice(0, 120);
   const openStatus = (s) => s !== "done" && s !== "wontfix";
+  // Lucide icons (ISC), one per status, so status never rests on color alone.
+  const ICONS = {
+    inbox: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="1"/>',
+    todo: '<circle cx="12" cy="12" r="10"/>',
+    doing: '<path d="M10.1 2.182a10 10 0 0 1 3.8 0"/><path d="M13.9 21.818a10 10 0 0 1-3.8 0"/><path d="M17.609 3.721a10 10 0 0 1 2.69 2.7"/><path d="M2.182 13.9a10 10 0 0 1 0-3.8"/><path d="M20.279 17.609a10 10 0 0 1-2.7 2.69"/><path d="M21.818 10.1a10 10 0 0 1 0 3.8"/><path d="M3.721 6.391a10 10 0 0 1 2.7-2.69"/><path d="M6.391 20.279a10 10 0 0 1-2.69-2.7"/>',
+    review: '<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>',
+    done: '<path d="M20 6 9 17l-5-5"/>',
+    wontfix: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  };
+  const icon = (s) => `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[s] || ICONS.inbox}</svg>`;
 
   async function api(method, path, body, raw) {
     const r = await fetch(BOARD + path, {
@@ -90,7 +100,15 @@ button { cursor: pointer; }
 .seg button[aria-pressed=true] { background: var(--raspberry); color: var(--on); }
 .hint { color: var(--graphite); font-size: 12px; margin-left: auto; }
 .err { color: var(--cherry); font-size: 12px; margin-top: 6px; }
-.pin { min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px 11px 11px 3px; border: 2px solid #fff; background: var(--raspberry); color: #fff; font-weight: 700; font-size: 11px; box-shadow: 0 2px 6px rgba(15,16,25,.3); }
+.pin { --c: #5D6274; display: inline-flex; align-items: center; gap: 3px; min-width: 22px; height: 22px; padding: 0 6px 0 5px; border-radius: 11px 11px 11px 3px; border: 2px solid #fff; background: var(--c); color: #fff; font-weight: 700; font-size: 11px; box-shadow: 0 2px 6px rgba(15,16,25,.3); transition: opacity .16s ease, transform .16s ease; }
+.pin svg, .st svg, .btn svg { flex: none; }
+.pin.gone { opacity: 0; transform: scale(.7); }
+/* Muted status colors: white text on each passes 4.5:1, on light and dark pages alike. */
+.s-todo { --c: #3550F0; } .s-doing { --c: #A35A00; } .s-review { --c: #7B3FC4; } .s-done { --c: #2E7D4F; } .s-wontfix { --c: #6B6F80; }
+.st { display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px 1px 5px; border-radius: 999px; font-size: 12px; font-weight: 600; color: var(--c, #5D6274); background: color-mix(in srgb, var(--c, #5D6274) 12%, transparent); }
+@media (prefers-color-scheme: dark) { .st { color: color-mix(in srgb, var(--c, #5D6274) 45%, #fff); } }
+.btn { display: inline-flex; align-items: center; gap: 5px; flex: none; }
+@media (prefers-reduced-motion: reduce) { .pin { transition: none; } }
 #card { width: 300px; background: var(--paper); border-radius: 12px; border: 1px solid var(--line); box-shadow: 0 10px 30px rgba(15,16,25,.22); padding: 12px; }
 #card h4 { margin: 0 0 4px; font: 700 14px/1.35 system-ui, sans-serif; color: var(--text); }
 #card .meta { color: var(--graphite); font-size: 12px; }
@@ -290,8 +308,8 @@ kbd { font: 600 11px/1 ui-monospace, monospace; border: 1px solid var(--line); b
     if (!pinsOn || !enabled) return;
     for (const t of notes) {
       const b = document.createElement("button");
-      b.className = "pin ui"; b.type = "button"; b.textContent = t.id; b.dataset.id = t.id;
-      b.setAttribute("aria-label", `Note #${t.id}: ${t.title}`); b.title = t.title;
+      b.className = `pin ui s-${t.status}`; b.type = "button"; b.innerHTML = icon(t.status); b.append(t.id); b.dataset.id = t.id;
+      b.setAttribute("aria-label", `Note #${t.id}, ${t.status}: ${t.title}`); b.title = `${t.status}: ${t.title}`;
       b.onclick = () => showCard(t, b);
       box.append(b);
     }
@@ -320,17 +338,34 @@ kbd { font: 600 11px/1 ui-monospace, monospace; border: 1px solid var(--line); b
     const c = $("card"); cardId = t.id;
     c.innerHTML = "";
     const h = document.createElement("h4"); h.textContent = t.title;
-    const meta = document.createElement("div"); meta.className = "meta"; meta.textContent = `#${t.id}, ${t.type}, ${t.priority}`;
+    const meta = document.createElement("div"); meta.className = "meta row";
+    const st = document.createElement("span"); st.className = `st s-${t.status}`; st.innerHTML = icon(t.status); st.append(t.status);
+    meta.append(st, `#${t.id}, ${t.type}, ${t.priority}`); meta.style.marginTop = "0";
     const body = document.createElement("div"); body.className = "body"; body.textContent = t.body || ""; body.hidden = !t.body;
     const sel = document.createElement("select"); sel.setAttribute("aria-label", "Status");
     for (const s of ["inbox", "todo", "doing", "review", "done", "wontfix"]) sel.append(new Option(s, s, false, s === t.status));
     const note = document.createElement("textarea"); note.placeholder = "Add a note"; note.setAttribute("aria-label", "Add a note");
     const err = document.createElement("div"); err.className = "err"; err.hidden = true;
     const row = document.createElement("div"); row.className = "row";
+    const statusRow = document.createElement("div"); statusRow.className = "row"; statusRow.append(sel);
     const add = document.createElement("button"); add.className = "btn primary"; add.type = "button"; add.textContent = "Add note";
     const open = document.createElement("a"); open.className = "btn"; open.href = `${BOARD}/#t=${t.id}`; open.target = "_blank"; open.rel = "noopener"; open.textContent = "Open on board";
     row.append(add, open);
-    const statusRow = document.createElement("div"); statusRow.className = "row"; statusRow.append(sel);
+    if (t.status === "review") {
+      const done = document.createElement("button"); done.className = "btn primary"; done.type = "button"; done.innerHTML = icon("done"); done.append("Done");
+      done.onclick = async () => {
+        done.disabled = true;
+        try {
+          await api("PATCH", `/api/tickets/${t.id}`, { status: "done" });
+          hideCard();
+          // Done pins are hidden: fade this one out, then refresh.
+          const p = $("pins").querySelector(`[data-id="${t.id}"]`);
+          if (p) p.classList.add("gone");
+          setTimeout(loadPins, matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 160);
+        } catch (e) { done.disabled = false; fail(e); }
+      };
+      statusRow.prepend(done);
+    }
     c.append(h, meta, body, statusRow, note, row, err);
     const fail = (e) => { err.textContent = e.message; err.hidden = false; };
     sel.onchange = async () => {
@@ -343,7 +378,7 @@ kbd { font: 600 11px/1 ui-monospace, monospace; border: 1px solid var(--line); b
     c.hidden = false;
     const p = place(pin.getBoundingClientRect(), 300, c.offsetHeight, innerWidth, innerHeight);
     Object.assign(c.style, { left: p.left + "px", top: p.top + "px" });
-    sel.focus();
+    (statusRow.querySelector("button") || sel).focus();
     const el = findEl(t.selector); if (el) { highlight(el); setTimeout(() => { if (!noteOpen()) highlight(null); }, 1500); }
   }
 
