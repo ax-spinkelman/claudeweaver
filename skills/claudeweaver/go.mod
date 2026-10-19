@@ -1,3 +1,3 @@
-module ticket-board
+module github.com/statico/claudeweaver/skills/claudeweaver
 
 go 1.22

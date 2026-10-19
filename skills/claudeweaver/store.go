@@ -185,17 +185,14 @@ func formatValue(v string) string {
 	return strconv.Quote(v)
 }
 
-func (d *doc) fields() (order []string, vals map[string]string) {
-	vals = map[string]string{}
+func (d *doc) fields() map[string]string {
+	vals := map[string]string{}
 	for _, l := range d.front {
 		if k, v, _, ok := splitLine(l); ok {
-			if _, dup := vals[k]; !dup {
-				order = append(order, k)
-			}
 			vals[k] = v
 		}
 	}
-	return order, vals
+	return vals
 }
 
 // set replaces the value of key in place (keeping its comment), or appends
@@ -237,8 +234,15 @@ func notesText(section string) string {
 	return strings.Trim(after, "\n")
 }
 
+// def sets *p to v when it is empty.
+func def(p *string, v string) {
+	if *p == "" {
+		*p = v
+	}
+}
+
 func toTicket(name string, d *doc) Ticket {
-	_, f := d.fields()
+	f := d.fields()
 	t := Ticket{File: name, Title: f["title"], Type: f["type"], Status: f["status"], Priority: f["priority"],
 		Area: f["area"], Created: f["created"], Updated: f["updated"], Source: f["source"], URL: f["url"],
 		Selector: f["selector"], ElementText: f["element_text"], Viewport: f["viewport"], Screenshot: f["screenshot"]}
@@ -248,11 +252,6 @@ func toTicket(name string, d *doc) Ticket {
 	}
 	if t.Title == "" {
 		t.Title = strings.ReplaceAll(strings.TrimPrefix(strings.TrimSuffix(name, ".md"), fmt.Sprintf("%04d-", t.ID)), "-", " ")
-	}
-	def := func(p *string, v string) {
-		if *p == "" {
-			*p = v
-		}
 	}
 	def(&t.Status, "inbox")
 	def(&t.Type, "chore")
@@ -477,22 +476,14 @@ func oneOf(field, v string, allowed []string) error {
 }
 
 func cleanTitle(t string) (string, error) {
-	t = strings.Join(strings.Fields(t), " ")
+	t = oneLine(t, 200)
 	if t == "" {
 		return "", errors.New("title is required")
-	}
-	if len([]rune(t)) > 200 {
-		t = string([]rune(t)[:200])
 	}
 	return t, nil
 }
 
 func (s *Store) Create(n NewTicket) (Ticket, error) {
-	def := func(p *string, v string) {
-		if *p == "" {
-			*p = v
-		}
-	}
 	def(&n.Type, "bug")
 	def(&n.Status, "inbox")
 	def(&n.Priority, "p2")
@@ -673,7 +664,7 @@ func (s *Store) AddImage(id int, data []byte) (Ticket, string, error) {
 		if err := writeAtomic(filepath.Join(s.Dir, rel), data); err != nil {
 			return err
 		}
-		if _, f := d.fields(); f["screenshot"] == "" {
+		if d.fields()["screenshot"] == "" {
 			d.set("screenshot", "tickets/"+rel)
 		}
 		desc, notes := splitBody(d.body)

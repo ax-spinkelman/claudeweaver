@@ -1,14 +1,14 @@
-// Dev notes: shift+click any element to file a ticket on the board.
+// Claudeweaver dev notes: shift+click any element to file a ticket on the board.
 // Loaded in dev only. Everything renders inside one Shadow DOM root, and the
-// only global is window.Devnotes.
+// only global is window.Claudeweaver.
 (() => {
-  if (window.Devnotes) return;
-  const BOARD = (() => { try { return new URL(document.currentScript.src).origin; } catch { return "http://localhost:8090"; } })();
+  if (window.Claudeweaver) return;
   // <script data-area="web" ...> sets the area of new notes; otherwise the board picks its first area.
   const AREA = document.currentScript?.dataset.area || undefined;
+  const BOARD = (() => { try { return new URL(document.currentScript.src).origin; } catch { return "http://localhost:8090"; } })();
   const store = {
-    get(k) { try { return localStorage.getItem("devnotes." + k); } catch { return null; } },
-    set(k, v) { try { localStorage.setItem("devnotes." + k, v); } catch {} },
+    get(k) { try { return localStorage.getItem("claudeweaver." + k); } catch { return null; } },
+    set(k, v) { try { localStorage.setItem("claudeweaver." + k, v); } catch {} },
   };
 
   // ---- pure helpers ----
@@ -76,7 +76,7 @@
   }
 
   // ---- shadow root ----
-  const host = document.createElement("dev-notes");
+  const host = document.createElement("claude-weaver");
   host.style.cssText = "all:initial;position:fixed;inset:0;pointer-events:none;z-index:2147483647;display:block;";
   const root = host.attachShadow({ mode: "open" });
   root.innerHTML = `<style>
@@ -128,6 +128,12 @@ button { cursor: pointer; }
 #toast { right: 34px; top: calc(50% + 30px); background: var(--ink); color: #fff; border-radius: 10px; padding: 8px 12px; display: flex; gap: 10px; align-items: center; box-shadow: 0 6px 20px rgba(15,16,25,.3); }
 #toast span { color: #fff; } #toast a { color: #AEBBFF; font-weight: 600; }
 kbd { font: 600 11px/1 ui-monospace, monospace; border: 1px solid var(--line); border-radius: 4px; padding: 1px 4px; }
+#save { margin-left: auto; }
+/* Touch: no Shift key, so the menu starts a pick and the note has a Save button. */
+@media (pointer: coarse) { .row .hint { display: none; } #note textarea, #card textarea, #card select { font-size: 16px; } .pin { min-width: 28px; height: 28px; font-size: 12px; } }
+@media (pointer: fine) { #save, #cancel { display: none; } }
+/* Phones: note and card sit at the bottom, above the on-screen keyboard. */
+@media (max-width: 520px) { #note, #card { left: 8px !important; right: 8px; top: auto !important; bottom: calc(8px + var(--kb, 0px)); width: auto; max-height: calc(100dvh - 16px - var(--kb, 0px)); overflow: auto; } #note::before { display: none; } #note { border-radius: 14px; } }
 </style>
 <div id="hl" hidden></div>
 <div id="pins"></div>
@@ -136,16 +142,18 @@ kbd { font: 600 11px/1 ui-monospace, monospace; border: 1px solid var(--line); b
   <div class="row">
     <span class="seg" role="group" aria-label="Kind"><button type="button" id="k-bug" aria-pressed="true">Bug</button><button type="button" id="k-feat" aria-pressed="false">Feature</button></span>
     <span class="hint"><kbd>Enter</kbd> save <kbd>Esc</kbd> cancel</span>
+    <button type="button" class="btn" id="cancel">Cancel</button><button type="button" class="btn primary" id="save">Save</button>
   </div>
   <div class="hint" id="note-imgs" hidden></div>
   <div class="err" id="note-err" hidden></div>
 </div>
 <div id="card" class="ui" role="dialog" aria-label="Note" hidden></div>
 <div id="menu" class="ui" hidden>
+  <button type="button" id="m-pick">Drop a note</button>
   <button type="button" id="m-pins"></button>
   <a id="m-board" target="_blank" rel="noopener">Open the board</a>
   <label><input type="checkbox" id="m-shots"> Attach screenshots</label>
-  <div class="tip"><kbd>Shift</kbd>+click anything to drop a note. <kbd>Shift</kbd>+<kbd>D</kbd> hides all of this.</div>
+  <div class="tip"><kbd>Shift</kbd>+click anything to drop a note, or choose Drop a note and tap it. <kbd>Shift</kbd>+<kbd>D</kbd> hides all of this.</div>
 </div>
 <button id="fab" class="ui" type="button" aria-label="Dev notes"></button>
 <div id="toast" class="ui" role="status" hidden></div>`;
@@ -156,7 +164,7 @@ kbd { font: 600 11px/1 ui-monospace, monospace; border: 1px solid var(--line); b
   let enabled = store.get("off") !== "1";
   let pinsOn = store.get("pins") !== "0";
   let notes = [];
-  let target = null, feature = false, stream = null, mx = 0, my = 0;
+  let target = null, feature = false, stream = null, mx = 0, my = 0, picking = false;
   const inOverlay = (e) => e.composedPath().includes(host);
 
   // ---- highlight ----
@@ -186,6 +194,11 @@ kbd { font: 600 11px/1 ui-monospace, monospace; border: 1px solid var(--line); b
     const p = place(target.getBoundingClientRect(), 300, $("note").offsetHeight || 150, innerWidth, innerHeight);
     Object.assign($("note").style, { left: p.left + "px", top: p.top + "px" });
   }
+  $("save").onclick = () => save();
+  $("cancel").onclick = () => closeNote();
+  // Keep the bottom sheet above the on-screen keyboard.
+  const vv = window.visualViewport;
+  if (vv) { const kb = () => host.style.setProperty("--kb", Math.max(0, innerHeight - vv.height - vv.offsetTop) + "px"); vv.addEventListener("resize", kb); vv.addEventListener("scroll", kb); }
   function closeNote() { $("note").hidden = true; $("text").value = ""; target = null; highlight(null); queue([]); store.set("draft", ""); }
 
   // The draft survives a reload (dev servers reload often). Images are not kept.
@@ -250,8 +263,8 @@ kbd { font: 600 11px/1 ui-monospace, monospace; border: 1px solid var(--line); b
     }
   }
 
-  // Screenshots: getDisplayMedia asks permission, so it only runs when the
-  // user turns it on. The stream is kept for the session so they are asked once.
+  // Screenshots: getDisplayMedia asks permission, so it only runs when the user
+  // turns it on. The stream is kept for the session so they are asked once.
   const within = (p, ms) => Promise.race([p, new Promise((r) => setTimeout(r, ms))]);
   async function grab(rect) {
     if (!stream || !stream.active) {
@@ -285,8 +298,9 @@ kbd { font: 600 11px/1 ui-monospace, monospace; border: 1px solid var(--line); b
     const t = $("toast");
     t.innerHTML = "";
     const s = document.createElement("span"); s.textContent = text || `Ticket #${id} created`;
-    const a = document.createElement("a"); a.href = `${BOARD}/#t=${id}`; a.target = "_blank"; a.rel = "noopener"; a.textContent = "Open on board";
-    t.append(s, a); t.hidden = false;
+    t.append(s);
+    if (id) { const a = document.createElement("a"); a.href = `${BOARD}/#t=${id}`; a.target = "_blank"; a.rel = "noopener"; a.textContent = "Open on board"; t.append(a); }
+    t.hidden = false;
     clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 5000);
   }
 
@@ -388,7 +402,13 @@ kbd { font: 600 11px/1 ui-monospace, monospace; border: 1px solid var(--line); b
     $("m-board").href = BOARD + "/";
     $("m-shots").checked = store.get("shots") === "1";
   }
-  $("fab").onclick = () => { $("menu").hidden = !$("menu").hidden; store.set("seen", "1"); syncMenu(); };
+  $("fab").onclick = () => { if (picking) return pick(false); $("menu").hidden = !$("menu").hidden; store.set("seen", "1"); syncMenu(); };
+  function pick(on) {
+    picking = on; $("menu").hidden = true;
+    if (on) { if (!pinsOn) { pinsOn = true; store.set("pins", "1"); renderPins(); } toast(null, "Tap anything to drop a note"); clearTimeout(toastTimer); }
+    else { $("toast").hidden = true; if (!noteOpen()) highlight(null); }
+  }
+  $("m-pick").onclick = () => pick(true);
   $("m-pins").onclick = () => { pinsOn = !pinsOn; store.set("pins", pinsOn ? "1" : "0"); syncMenu(); renderPins(); };
   $("m-shots").onchange = () => {
     store.set("shots", $("m-shots").checked ? "1" : "0");
@@ -408,6 +428,7 @@ kbd { font: 600 11px/1 ui-monospace, monospace; border: 1px solid var(--line); b
     if (e.key === "Shift" && enabled && !noteOpen()) { const el = document.elementFromPoint(mx, my); if (el && el !== host) highlight(el); }
     if ((e.key === "D" || e.key === "d") && e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey && !editable(e)) { e.preventDefault(); setEnabled(!enabled); }
     if (e.key === "Escape" && !$("card").hidden) hideCard();
+    if (e.key === "Escape" && picking) pick(false);
   }, true);
   addEventListener("keyup", (e) => { if (e.key === "Shift" && !noteOpen()) highlight(null); }, true);
   addEventListener("mousemove", (e) => {
@@ -416,9 +437,10 @@ kbd { font: 600 11px/1 ui-monospace, monospace; border: 1px solid var(--line); b
     if (e.shiftKey && !inOverlay(e)) highlight(e.target); else if (!$("hl").hidden) highlight(null);
   }, { capture: true, passive: true });
   const block = (e) => {
-    if (!enabled || !pinsOn || !e.shiftKey || e.button !== 0 || inOverlay(e)) return;
+    if (!enabled || !pinsOn || !(e.shiftKey || picking) || e.button !== 0 || inOverlay(e)) return;
     e.preventDefault(); e.stopImmediatePropagation();
-    if (e.type === "click") openNote(e.target);
+    if (picking && e.type === "pointerdown") highlight(e.target);
+    if (e.type === "click") { if (picking) pick(false); openNote(e.target); }
   };
   for (const t of ["pointerdown", "mousedown", "pointerup", "mouseup", "click", "dblclick"]) addEventListener(t, block, true);
   addEventListener("click", (e) => {
@@ -458,5 +480,5 @@ kbd { font: 600 11px/1 ui-monospace, monospace; border: 1px solid var(--line); b
   }
   if (document.body) mount(); else addEventListener("DOMContentLoaded", mount);
 
-  window.Devnotes = { board: BOARD, toggle: () => setEnabled(!enabled), reload: loadPins, _: { selectorFor, parseNote, place } };
+  window.Claudeweaver = { board: BOARD, toggle: () => setEnabled(!enabled), reload: loadPins };
 })();

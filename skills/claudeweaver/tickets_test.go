@@ -183,22 +183,6 @@ Line
 	}
 }
 
-func TestSetAreas(t *testing.T) {
-	defer func(a []string) { Areas = a }(Areas)
-	setAreas(" ios, api ,,")
-	s := fixedStore(t)
-	if tk, err := s.Create(NewTicket{Title: "x"}); err != nil || tk.Area != "ios" {
-		t.Fatalf("default area: %+v %v", tk, err)
-	}
-	if _, err := s.Create(NewTicket{Title: "x", Area: "web"}); err == nil {
-		t.Fatal("area outside -areas accepted")
-	}
-	setAreas("")
-	if len(Areas) != 2 || Areas[1] != "api" {
-		t.Fatalf("empty list changed areas: %v", Areas)
-	}
-}
-
 func TestIDAllocation(t *testing.T) {
 	s := fixedStore(t)
 	writeFile(t, s, "0150-a.md", "---\nid: 150\n---\n")
@@ -324,6 +308,22 @@ EVENT screenshot #1000 tickets/assets/1000.png
 	}
 }
 
+func TestSetAreas(t *testing.T) {
+	defer func(a []string) { Areas = a }(Areas)
+	setAreas(" ios, api ,,")
+	s := fixedStore(t)
+	if tk, err := s.Create(NewTicket{Title: "x"}); err != nil || tk.Area != "ios" {
+		t.Fatalf("default area: %+v %v", tk, err)
+	}
+	if _, err := s.Create(NewTicket{Title: "x", Area: "web"}); err == nil {
+		t.Fatal("area outside -areas accepted")
+	}
+	setAreas("")
+	if len(Areas) != 2 || Areas[1] != "api" {
+		t.Fatalf("empty list changed areas: %v", Areas)
+	}
+}
+
 func TestCORSAndHosts(t *testing.T) {
 	for o, want := range map[string]bool{
 		"http://localhost:5173": true, "http://127.0.0.1:8081": true, "http://localhost": true,
@@ -334,6 +334,16 @@ func TestCORSAndHosts(t *testing.T) {
 		if allowedOrigin(o) != want {
 			t.Errorf("allowedOrigin(%q) = %v", o, !want)
 		}
+	}
+	tailnetHost = "box.example.ts.net"
+	t.Cleanup(func() { tailnetHost = "" })
+	for o, want := range map[string]bool{"https://box.example.ts.net:18081": true, "https://evil.ts.net": false, "http://box.example.ts.net": false} {
+		if allowedOrigin(o) != want {
+			t.Errorf("allowedOrigin(%q) = %v", o, !want)
+		}
+	}
+	if !loopbackHost("box.example.ts.net:18090") || loopbackHost("other.example.ts.net") {
+		t.Error("tailnet host check")
 	}
 	h := newServer(fixedStore(t), false, io.Discard)
 	w := do(h, "OPTIONS", "/api/tickets", "http://localhost:5173", "")

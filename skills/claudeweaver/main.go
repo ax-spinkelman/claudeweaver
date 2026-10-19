@@ -1,4 +1,4 @@
-// Command ticket-board serves a ticket board and the dev-mode sticky-note
+// Command claudeweaver serves a ticket board and the dev-mode sticky-note
 // overlay, and doubles as a CLI. Ticket files in -dir are the source of truth.
 package main
 
@@ -32,15 +32,16 @@ const maxScreenshot = 5 << 20
 func main() {
 	if len(os.Args) > 1 && !strings.HasPrefix(os.Args[1], "-") {
 		if err := runCLI(os.Args[1:], os.Stdin, os.Stdout); err != nil {
-			fmt.Fprintln(os.Stderr, "ticket-board:", err)
+			fmt.Fprintln(os.Stderr, "claudeweaver:", err)
 			os.Exit(1)
 		}
 		return
 	}
 	addr := flag.String("addr", ":8090", "listen address; an empty host means loopback only")
 	dir := flag.String("dir", "tickets", "tickets directory")
-	areas := flag.String("areas", strings.Join(Areas, ","), "comma-separated list of allowed areas")
+	areas := flag.String("areas", strings.Join(Areas, ","), "comma-separated list of allowed areas; the first is the default")
 	unsafeAny := flag.Bool("unsafe-listen-any", false, "allow a non-loopback listen address (no auth!)")
+	flag.StringVar(&tailnetHost, "tailnet-host", "", "this machine's Tailscale name, so pages served over tailscale serve can use the board")
 	flag.Parse()
 	setAreas(*areas)
 
@@ -58,7 +59,7 @@ func main() {
 			}
 			log.Fatal(err)
 		}
-		log.Printf("ticket board on http://%s (dir %s)", ln.Addr(), *dir)
+		log.Printf("claudeweaver board on http://%s (dir %s)", ln.Addr(), *dir)
 		go func() { errc <- http.Serve(ln, h) }()
 	}
 	log.Fatal(<-errc)
@@ -93,13 +94,23 @@ func listenAddrs(addr string, unsafeAny bool) ([]string, error) {
 	return nil, fmt.Errorf("refusing to listen on %q: the board has no auth; use a loopback address or pass -unsafe-listen-any", addr)
 }
 
+// tailnetHost is this machine's exact Tailscale name. tailscale serve only
+// answers on the tailnet, so pages and phones there may use the board.
+var tailnetHost string
+
 // allowedOrigin reports whether a browser origin may call the API.
 func allowedOrigin(origin string) bool {
 	u, err := url.Parse(origin)
-	if err != nil || u.Scheme != "http" || u.Path != "" || u.User != nil {
+	if err != nil || u.Path != "" || u.User != nil {
 		return false
 	}
 	h := u.Hostname()
+	if u.Scheme == "https" {
+		return tailnetHost != "" && h == tailnetHost
+	}
+	if u.Scheme != "http" {
+		return false
+	}
 	return h == "localhost" || h == "127.0.0.1" || strings.HasSuffix(h, ".localhost") // portless names
 }
 
@@ -110,7 +121,7 @@ func loopbackHost(host string) bool {
 		host = h
 	}
 	host = strings.Trim(host, "[]")
-	return host == "localhost" || host == "127.0.0.1" || host == "::1" || strings.HasSuffix(host, ".localhost")
+	return host == "localhost" || host == "127.0.0.1" || host == "::1" || strings.HasSuffix(host, ".localhost") || (tailnetHost != "" && host == tailnetHost)
 }
 
 type server struct {
@@ -373,12 +384,12 @@ func age(ts string, now time.Time) string {
 // ---- CLI ----
 
 const usage = `usage:
-  ticket-board ls [--status todo] [--area web]
-  ticket-board show <id>
-  ticket-board new --title "..." [--type bug] [--area web] [--priority p2] [--status todo] [--body - | --body "text"]
-  ticket-board mv <id> <status>
-  ticket-board note <id> "text" [--by name]
-  ticket-board [-addr :8090] [-dir tickets] [-areas web,server,docs,infra]     (serve the board)
+  claudeweaver ls [--status todo] [--area web]
+  claudeweaver show <id>
+  claudeweaver new --title "..." [--type bug] [--area web] [--priority p2] [--status todo] [--body - | --body "text"]
+  claudeweaver mv <id> <status>
+  claudeweaver note <id> "text" [--by name]
+  claudeweaver [-addr :8090] [-dir tickets] [-areas web,server,docs,infra] [-tailnet-host name]     (serve the board)
 All commands take --dir and --areas.`
 
 func runCLI(args []string, stdin io.Reader, out io.Writer) error {
