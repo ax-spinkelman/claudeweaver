@@ -29,7 +29,7 @@ The flags are:
 - `-areas`: a comma list of areas. The default is `web,server,docs,infra`. The first area is the default for new tickets.
 - `-tailnet-host`: the Tailscale name of this machine, for example `box.example.ts.net`. Use it with `tailscale serve`, so that a phone on your tailnet can drop notes.
 
-Open `http://localhost:<port>`. On the board, N opens quick add (`feat: Title p1 #web`, then Enter). J and K move between cards. Enter opens a card. Keys 1 to 5 move it to a column. E edits the title. The panel saves as you type. You can paste or drop images into it.
+Open `http://localhost:<port>`. On the board, N opens quick add (`feat: Title p1 #web`, then Enter). J and K move between cards. Enter opens a card. Keys 1 to 6 move it to a column. E edits the title. The panel saves as you type. You can paste or drop images into it.
 
 ## The CLI
 
@@ -92,7 +92,7 @@ The file name is `tickets/<id>-<slug>.md`, for example `tickets/1007-save-button
 id: 1007
 title: Save button overlaps footer
 type: bug          # bug | feature | chore
-status: inbox      # inbox | todo | doing | review | done | wontfix
+status: inbox      # inbox | todo | doing | blocked | review | done | wontfix
 priority: p2       # p1 (urgent) | p2 | p3 (someday)
 area: web          # one of -areas
 created: 2026-10-16T18:04:00Z
@@ -124,6 +124,7 @@ Images go in `tickets/assets/<id>.png`, then `<id>-2.png` and so on. The body li
 - `inbox`: new and not triaged. Only the sticky notes of the human go here.
 - `todo`: accepted and ready to start.
 - `doing`: someone works on it. The name of that agent is in `## Notes`.
+- `blocked`: the agent cannot continue without a decision or a review from the human. The question is in the ticket.
 - `review`: the work is finished and waits for the human.
 - `done` and `wontfix`: closed. Only the human sets these.
 
@@ -133,6 +134,8 @@ Images go in `tickets/assets/<id>.png`, then `<id>-2.png` and so on. The body li
 - Add a note with your name when you start, for example `./.claudeweaver note 1007 "Started." --by claude`.
 - Notes are append-only. Add a new note. Do not rewrite old notes.
 - Commit as you work, not at the end. Put the ticket id in the commit message, for example `settings: keep the save button above the footer (1007)`.
+- If you cannot continue without a decision or a review from the human, set `status: blocked`. Write the question in a `## Blocked` section or in a note. Give the options that you see and the one that you recommend. Then start other work. Do not wait.
+- When the human answers a `blocked` ticket, the human moves it back to `todo` or `doing`. Read the answer before you continue.
 - When you finish, add a `## Resolution` section at the end of the ticket. Then set `status: review`.
 - Never set `done` or `wontfix`. Only the human closes tickets.
 - If you find work that you will not do now, file a ticket. Do not leave a TODO comment in the code. File it with `status: todo` and `source: agent`. The `inbox` status is only for the sticky notes of the human.
@@ -185,7 +188,7 @@ CLI writes and file edits print nothing, so your own writes do not wake you.
 3. When the watch wakes you, and after each restart of the board, list the open work. Events that occur while the board is down are lost.
 
    ```sh
-   ./.claudeweaver ls --status inbox,todo
+   ./.claudeweaver ls --status inbox,todo,doing
    ```
 
 4. For each new ticket, read it with `show`. If it has a screenshot, look at it. Then triage it: set the type, priority and area, and move it to `todo` or start it.

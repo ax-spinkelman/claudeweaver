@@ -43,13 +43,15 @@ Open http://localhost:8090. Then add this tag to the dev build of your app only:
 
 Each ticket is one file, for example `tickets/1007-save-button-overlaps-footer.md`. The file has YAML frontmatter (id, title, type, status, priority, area, source) and a Markdown body. You commit the tickets to git with your code. You, the agent and the board all edit the same files. A write by the board changes only the lines it needs and keeps everything else.
 
-A ticket moves through these statuses: `inbox`, `todo`, `doing`, `review`, and then `done` or `wontfix`. The agent sets `doing` when it starts and `review` when it finishes. Only you set `done`.
+A ticket moves through these statuses: `inbox`, `todo`, `doing`, `blocked`, `review`, and then `done` or `wontfix`. The agent sets `doing` when it starts and `review` when it finishes. Only you set `done`.
+
+The agent sets `blocked` when it cannot continue without your decision or review. It writes the question in the ticket and starts other work. You answer in a note, then move the ticket back to `todo` or `doing`.
 
 ### The board
 
 The board is one Go program that uses only the standard library. It has no database. The ticket files are the data. The program serves the kanban page, a JSON API and the overlay script. The same binary is also a CLI (`ls`, `show`, `new`, `mv`, `note`).
 
-On the board, N opens quick add, J and K move between cards, and keys 1 to 5 move a card to a column. You can paste a screenshot into quick add or into the ticket panel. The icon of the Doing column turns, so you can see that work is in progress.
+On the board, N opens quick add, J and K move between cards, and keys 1 to 6 move a card to a column. You can paste a screenshot into quick add or into the ticket panel. The icon of the Doing column turns, so you can see that work is in progress. The Blocked column is red and has a stop-sign icon.
 
 ### The overlay
 
