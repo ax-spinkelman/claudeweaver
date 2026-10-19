@@ -64,7 +64,7 @@
     done: '<path d="M20 6 9 17l-5-5"/>',
     wontfix: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
   };
-  const icon = (s) => `<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[s] || ICONS.inbox}</svg>`;
+  const icon = (s) => `<svg${s === "doing" ? ' class="spin"' : ""} viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[s] || ICONS.inbox}</svg>`;
 
   async function api(method, path, body, raw) {
     const r = await fetch(BOARD + path, {
@@ -108,7 +108,10 @@ button { cursor: pointer; }
 .st { display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px 1px 5px; border-radius: 999px; font-size: 12px; font-weight: 600; color: var(--c, #5D6274); background: color-mix(in srgb, var(--c, #5D6274) 12%, transparent); }
 @media (prefers-color-scheme: dark) { .st { color: color-mix(in srgb, var(--c, #5D6274) 45%, #fff); } }
 .btn { display: inline-flex; align-items: center; gap: 5px; flex: none; }
-@media (prefers-reduced-motion: reduce) { .pin { transition: none; } }
+/* The doing icon turns, so work in progress reads at a glance. */
+.spin { animation: spin 1.2s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .pin { transition: none; } .spin { animation: none; } }
 #card { width: 300px; background: var(--paper); border-radius: 12px; border: 1px solid var(--line); box-shadow: 0 10px 30px rgba(15,16,25,.22); padding: 12px; }
 #card h4 { margin: 0 0 4px; font: 700 14px/1.35 system-ui, sans-serif; color: var(--text); }
 #card .meta { color: var(--graphite); font-size: 12px; }
