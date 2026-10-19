@@ -331,7 +331,7 @@ type column struct {
 	Tickets       []Ticket
 }
 
-var labels = map[string]string{"inbox": "Inbox", "todo": "To do", "doing": "Doing", "review": "Review", "done": "Done", "wontfix": "Won't fix"}
+var labels = map[string]string{"inbox": "Inbox", "todo": "To do", "doing": "Doing", "blocked": "Blocked", "review": "Review", "done": "Done", "wontfix": "Won't fix"}
 
 // columns groups tickets by status; unknown statuses land in the inbox.
 func columns(ts []Ticket) []column {

@@ -60,6 +60,7 @@
     inbox: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="1"/>',
     todo: '<circle cx="12" cy="12" r="10"/>',
     doing: '<path d="M10.1 2.182a10 10 0 0 1 3.8 0"/><path d="M13.9 21.818a10 10 0 0 1-3.8 0"/><path d="M17.609 3.721a10 10 0 0 1 2.69 2.7"/><path d="M2.182 13.9a10 10 0 0 1 0-3.8"/><path d="M20.279 17.609a10 10 0 0 1-2.7 2.69"/><path d="M21.818 10.1a10 10 0 0 1 0 3.8"/><path d="M3.721 6.391a10 10 0 0 1 2.7-2.69"/><path d="M6.391 20.279a10 10 0 0 1-2.69-2.7"/>',
+    blocked: '<path d="M12 16h.01"/><path d="M12 8v4"/><path d="M15.312 2a2 2 0 0 1 1.414.586l4.688 4.688A2 2 0 0 1 22 8.688v6.624a2 2 0 0 1-.586 1.414l-4.688 4.688a2 2 0 0 1-1.414.586H8.688a2 2 0 0 1-1.414-.586l-4.688-4.688A2 2 0 0 1 2 15.312V8.688a2 2 0 0 1 .586-1.414l4.688-4.688A2 2 0 0 1 8.688 2z"/>',
     review: '<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>',
     done: '<path d="M20 6 9 17l-5-5"/>',
     wontfix: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
@@ -104,7 +105,7 @@ button { cursor: pointer; }
 .pin svg, .st svg, .btn svg { flex: none; }
 .pin.gone { opacity: 0; transform: scale(.7); }
 /* Muted status colors: white text on each passes 4.5:1, on light and dark pages alike. */
-.s-todo { --c: #3550F0; } .s-doing { --c: #A35A00; } .s-review { --c: #7B3FC4; } .s-done { --c: #2E7D4F; } .s-wontfix { --c: #6B6F80; }
+.s-todo { --c: #3550F0; } .s-doing { --c: #A35A00; } .s-blocked { --c: #B91C1C; } .s-review { --c: #7B3FC4; } .s-done { --c: #2E7D4F; } .s-wontfix { --c: #6B6F80; }
 .st { display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px 1px 5px; border-radius: 999px; font-size: 12px; font-weight: 600; color: var(--c, #5D6274); background: color-mix(in srgb, var(--c, #5D6274) 12%, transparent); }
 @media (prefers-color-scheme: dark) { .st { color: color-mix(in srgb, var(--c, #5D6274) 45%, #fff); } }
 .btn { display: inline-flex; align-items: center; gap: 5px; flex: none; }
@@ -360,7 +361,7 @@ kbd { font: 600 11px/1 ui-monospace, monospace; border: 1px solid var(--line); b
     meta.append(st, `#${t.id}, ${t.type}, ${t.priority}`); meta.style.marginTop = "0";
     const body = document.createElement("div"); body.className = "body"; body.textContent = t.body || ""; body.hidden = !t.body;
     const sel = document.createElement("select"); sel.setAttribute("aria-label", "Status");
-    for (const s of ["inbox", "todo", "doing", "review", "done", "wontfix"]) sel.append(new Option(s, s, false, s === t.status));
+    for (const s of ["inbox", "todo", "doing", "blocked", "review", "done", "wontfix"]) sel.append(new Option(s, s, false, s === t.status));
     const note = document.createElement("textarea"); note.placeholder = "Add a note"; note.setAttribute("aria-label", "Add a note");
     const err = document.createElement("div"); err.className = "err"; err.hidden = true;
     const row = document.createElement("div"); row.className = "row";

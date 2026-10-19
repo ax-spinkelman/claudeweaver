@@ -19,7 +19,7 @@ import (
 // Allowed values. Reads accept any value; writes through the tool are
 // validated against these. Areas is set by the -areas flag.
 var (
-	Statuses   = []string{"inbox", "todo", "doing", "review", "done", "wontfix"}
+	Statuses   = []string{"inbox", "todo", "doing", "blocked", "review", "done", "wontfix"}
 	Types      = []string{"bug", "feature", "chore"}
 	Priorities = []string{"p1", "p2", "p3"}
 	Areas      = []string{"web", "server", "docs", "infra"}

@@ -493,6 +493,13 @@ func TestCLI(t *testing.T) {
 			t.Fatalf("show missing %q:\n%s", want, got)
 		}
 	}
+	run("mv", "1000", "blocked")
+	if got := run("ls", "--status", "blocked"); !strings.Contains(got, "1000  blocked") {
+		t.Fatalf("ls blocked: %q", got)
+	}
+	if c := columns(nil); c[2].Status != "doing" || c[3].Status != "blocked" || c[3].Label != "Blocked" || c[4].Status != "review" {
+		t.Fatalf("blocked column not between doing and review: %+v", c)
+	}
 	if err := runCLI([]string{"mv", "1000", "closed", "--dir", s.Dir}, nil, &out); err == nil {
 		t.Fatal("bad status accepted")
 	}
