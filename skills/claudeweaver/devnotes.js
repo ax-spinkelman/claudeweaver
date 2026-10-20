@@ -112,7 +112,7 @@ button { cursor: pointer; }
 /* The doing icon turns, so work in progress reads at a glance. */
 .spin { animation: spin 1.2s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .pin { transition: none; } .spin { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .pin { transition: none; } .spin, .thumb { animation: none; } }
 #card { width: 300px; background: var(--paper); border-radius: 12px; border: 1px solid var(--line); box-shadow: 0 10px 30px rgba(15,16,25,.22); padding: 12px; }
 #card h4 { margin: 0 0 4px; font: 700 14px/1.35 system-ui, sans-serif; color: var(--text); }
 #card .meta { color: var(--graphite); font-size: 12px; }
@@ -133,6 +133,16 @@ button { cursor: pointer; }
 #toast span { color: #fff; } #toast a { color: #AEBBFF; font-weight: 600; }
 kbd { font: 600 11px/1 ui-monospace, monospace; border: 1px solid var(--line); border-radius: 4px; padding: 1px 4px; }
 #save { margin-left: auto; }
+/* Chosen or pasted images, each with a remove button. */
+.thumbs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.thumb { position: relative; width: 56px; height: 56px; animation: pop .14s ease-out; }
+.thumb img { display: block; width: 100%; height: 100%; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); }
+.thumb button { position: absolute; top: -8px; right: -8px; width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--note); background: var(--ink); color: #fff; display: grid; place-items: center; padding: 0; }
+@keyframes pop { from { opacity: 0; transform: scale(.85); } }
+/* iOS Safari has no getDisplayMedia, so phones pick screenshots from Photos. */
+#photos { display: none; position: relative; margin-top: 8px; }
+#photos input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+@media (pointer: coarse) { #photos { display: inline-flex; } }
 /* Touch: no Shift key, so the menu starts a pick and the note has a Save button. */
 @media (pointer: coarse) { .row .hint { display: none; } #note textarea, #card textarea, #card select { font-size: 16px; } .pin { min-width: 28px; height: 28px; font-size: 12px; } }
 @media (pointer: fine) { #save, #cancel { display: none; } }
@@ -148,7 +158,8 @@ kbd { font: 600 11px/1 ui-monospace, monospace; border: 1px solid var(--line); b
     <span class="hint"><kbd>Enter</kbd> save <kbd>Esc</kbd> cancel</span>
     <button type="button" class="btn" id="cancel">Cancel</button><button type="button" class="btn primary" id="save">Save</button>
   </div>
-  <div class="hint" id="note-imgs" hidden></div>
+  <label class="btn" id="photos"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 5h6"/><path d="M19 2v6"/><path d="M21 11.5V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7.5"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/><circle cx="9" cy="9" r="2"/></svg>Choose from Photos<input type="file" id="file" accept="image/*" multiple></label>
+  <div class="thumbs" id="note-imgs" hidden></div>
   <div class="err" id="note-err" hidden></div>
 </div>
 <div id="card" class="ui" role="dialog" aria-label="Note" hidden></div>
@@ -156,7 +167,7 @@ kbd { font: 600 11px/1 ui-monospace, monospace; border: 1px solid var(--line); b
   <button type="button" id="m-pick">Drop a note</button>
   <button type="button" id="m-pins"></button>
   <a id="m-board" target="_blank" rel="noopener">Open the board</a>
-  <label><input type="checkbox" id="m-shots"> Attach screenshots</label>
+  <label id="m-shots-row"><input type="checkbox" id="m-shots"> Attach screenshots</label>
   <div class="tip"><kbd>Shift</kbd>+click anything to drop a note, or choose Drop a note and tap it. <kbd>Shift</kbd>+<kbd>D</kbd> hides all of this.</div>
 </div>
 <button id="fab" class="ui" type="button" aria-label="Dev notes"></button>
@@ -219,7 +230,28 @@ kbd { font: 600 11px/1 ui-monospace, monospace; border: 1px solid var(--line); b
 
   // Pasted or dropped images: queued on a new note, uploaded right away on an open card.
   let queued = [], cardId = null;
-  const imagesIn = (dt) => [...(dt?.files || [])].filter((f) => /^image\/(png|jpeg|webp)$/.test(f.type));
+  const imagesIn = (dt) => [...(dt?.files || [])].filter((f) => f.type.startsWith("image/"));
+  // The board takes PNG, JPEG or WebP up to 5 MB. Anything else (a big photo,
+  // HEIC) is redrawn as a JPEG, smaller each try, until it fits.
+  const MAX = 5 << 20;
+  async function fit(f) {
+    if (f.size <= MAX && /^image\/(png|jpeg|webp)$/.test(f.type)) return f;
+    const bmp = await createImageBitmap(f), c = document.createElement("canvas");
+    for (let s = Math.min(1, 4096 / Math.max(bmp.width, bmp.height)); s > 0.05; s *= 0.7) {
+      c.width = Math.round(bmp.width * s); c.height = Math.round(bmp.height * s);
+      c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+      const b = await new Promise((r) => c.toBlob(r, "image/jpeg", 0.85));
+      if (b && b.size <= MAX) return b;
+    }
+    throw new Error("image too large");
+  }
+  async function addImages(f) {
+    const out = [];
+    for (const x of f) {
+      try { out.push(await fit(x)); } catch { $("note-err").textContent = `Could not attach ${x.name || "an image"}.`; $("note-err").hidden = false; }
+    }
+    queue([...queued, ...out]);
+  }
   function takeImages(el, onFiles) {
     const files = (dt) => !!dt && [...dt.types].includes("Files");
     el.addEventListener("paste", (e) => { const f = imagesIn(e.clipboardData); if (f.length) { e.preventDefault(); onFiles(f); } });
@@ -228,13 +260,24 @@ kbd { font: 600 11px/1 ui-monospace, monospace; border: 1px solid var(--line); b
   }
   function queue(f) {
     queued = f;
-    $("note-imgs").textContent = f.length === 1 ? "1 image attached" : f.length + " images attached";
-    $("note-imgs").hidden = !f.length;
+    const box = $("note-imgs");
+    box.innerHTML = "";
+    f.forEach((file, i) => {
+      const d = document.createElement("div"); d.className = "thumb";
+      const img = document.createElement("img"); img.alt = `Image ${i + 1}`;
+      img.src = URL.createObjectURL(file); img.onload = img.onerror = () => URL.revokeObjectURL(img.src);
+      const x = document.createElement("button"); x.type = "button"; x.setAttribute("aria-label", `Remove image ${i + 1}`);
+      x.innerHTML = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">${ICONS.wontfix}</svg>`;
+      x.onclick = () => queue(queued.filter((_, j) => j !== i));
+      d.append(img, x); box.append(d);
+    });
+    box.hidden = !f.length;
   }
-  takeImages($("note"), (f) => { queue([...queued, ...f]); $("text").focus(); });
+  takeImages($("note"), async (f) => { await addImages(f); $("text").focus(); });
+  $("file").onchange = async () => { const f = [...$("file").files]; $("file").value = ""; await addImages(f); };
   takeImages($("card"), async (f) => {
     const id = cardId;
-    for (const x of f) await api("POST", `/api/tickets/${id}/screenshot`, null, x).catch(() => {});
+    for (const x of f) await fit(x).then((b) => api("POST", `/api/tickets/${id}/screenshot`, null, b)).catch(() => {});
     if (f.length) toast(id, `Added ${f.length === 1 ? "an image" : f.length + " images"} to #${id}`);
   });
   $("text").addEventListener("keydown", (e) => {
@@ -405,6 +448,7 @@ kbd { font: 600 11px/1 ui-monospace, monospace; border: 1px solid var(--line); b
     $("m-pins").textContent = pinsOn ? "Hide pins" : "Show pins";
     $("m-board").href = BOARD + "/";
     $("m-shots").checked = store.get("shots") === "1";
+    $("m-shots-row").hidden = !navigator.mediaDevices?.getDisplayMedia;
   }
   $("fab").onclick = () => { if (picking) return pick(false); $("menu").hidden = !$("menu").hidden; store.set("seen", "1"); syncMenu(); };
   function pick(on) {
