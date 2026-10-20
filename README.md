@@ -61,10 +61,27 @@ The overlay is one script, `devnotes.js`. It runs in a shadow root, so it does n
 - On a phone or tablet, open the small tab on the right edge, choose "Drop a note" and tap the element.
 - Pins mark the open tickets on the page. Each pin shows the status with a color and an icon. The icon of a `doing` ticket turns. If you set "reduce motion" in your system, the icon does not turn.
 - Click a pin to read the ticket, change its status or add a note.
-- Paste or drop an image into a note to attach it. You can also turn on screenshots in the menu.
+- Paste or drop an image into a note to attach it. You can also turn on screenshots in the menu. On a phone or tablet, tap "Choose from Photos".
 - Shift+D hides the whole overlay.
 
 To use the overlay on a phone, serve your app and the board with `tailscale serve`, and start the board with `-tailnet-host <name>.ts.net`. SKILL.md has the steps.
+
+### Send screenshots from an iPhone
+
+You make an iOS Shortcut one time. Then you share a screenshot to it, type a note, and the board gets an `inbox` ticket with the image. The phone must be on your tailnet, and the board must be served with `tailscale serve` (SKILL.md has the steps). Open `https://<name>.ts.net:18090/phone` on the phone to see these steps with your address filled in.
+
+1. Open the Shortcuts app. Tap + to make a new Shortcut. Name it "Send to board".
+2. Tap the info button (i) and turn on "Show in Share Sheet". In the first action, set "Receive Images from Share Sheet". If there is no input, set "Stop and Respond".
+3. Add the action "Ask for Input". Set the type to Text and the prompt to "Note". Turn on "Allow Multiple Lines" if you want a body.
+4. Add the action "Get Contents of URL". Set the URL to `https://<name>.ts.net:18090/api/notes`. Tap "Show More".
+5. Set Method to POST and Request Body to Form.
+6. Add a Text field. Set the key to `title` and the value to the "Provided Input" variable.
+7. Add a File field. Set the key to `image` and the value to the "Shortcut Input" variable.
+8. Add the action "Show Notification". Set its text to the "Contents of URL" variable.
+
+To use it, take a screenshot, tap the thumbnail, tap the share button and choose "Send to board". The first line of the note becomes the title, and the other lines become the body. The notification shows the reply, for example `Ticket #1340 created: Button overlaps`.
+
+Each image must be 5 MB or less, and one request takes 10 images at most. If a photo is too large, add the action "Convert Image" (format JPEG) before "Get Contents of URL".
 
 ### The JSON API
 
@@ -76,6 +93,8 @@ To use the overlay on a phone, serve your app and the board with `tailscale serv
 | `PATCH /api/tickets/{id}` | Changes fields, for example `{"status":"review"}`. |
 | `POST /api/tickets/{id}/notes` | Adds a note, `{"text":"...","by":"name"}`. |
 | `POST /api/tickets/{id}/screenshot` | Attaches a PNG, JPEG or WebP image (5 MB maximum). |
+| `POST /api/notes` | Creates an `inbox` ticket from a multipart form: `title`, `body` and up to 10 image files. It replies in plain text. |
+| `GET /phone` | Shows the iPhone Shortcut steps with the address of this board. |
 
 ### The agent loop
 
@@ -91,6 +110,7 @@ Claudeweaver is a tool for development only. Do not run it on a server, and do n
 - There is no auth. Each program on your machine can read and change the tickets.
 - The board refuses requests whose `Host` header is not a loopback name. This stops DNS rebinding.
 - The API accepts browser requests only from `http://localhost`, `http://127.0.0.1` and `http://*.localhost` pages. With `-tailnet-host`, it also accepts that one Tailscale name over HTTPS.
+- A request without an `Origin` header (the CLI, curl, an iOS Shortcut) is not a browser page, so the API accepts it. It must still pass the `Host` check.
 
 ## Tests
 

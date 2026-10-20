@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -502,5 +503,107 @@ func TestCLI(t *testing.T) {
 	}
 	if err := runCLI([]string{"mv", "1000", "closed", "--dir", s.Dir}, nil, &out); err == nil {
 		t.Fatal("bad status accepted")
+	}
+}
+
+func multipartReq(t *testing.T, fields map[string]string, files ...string) *http.Request {
+	t.Helper()
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	for k, v := range fields {
+		mw.WriteField(k, v)
+	}
+	for i, f := range files {
+		fw, _ := mw.CreateFormFile("image", fmt.Sprintf("IMG_%d.png", i))
+		io.WriteString(fw, f)
+	}
+	mw.Close()
+	r := httptest.NewRequest("POST", "/api/notes", &buf)
+	r.Host = "localhost:8090"
+	r.Header.Set("Content-Type", mw.FormDataContentType())
+	return r
+}
+
+func TestNotesEndpoint(t *testing.T) {
+	s := fixedStore(t)
+	var out bytes.Buffer
+	h := newServer(s, false, &out)
+	send := func(r *http.Request) *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		return w
+	}
+	png, jpeg := "\x89PNG\r\n\x1a\nrest", "\xff\xd8\xff\xe0rest"
+	many := make([]string, maxNoteImages+1)
+	for i := range many {
+		many[i] = png
+	}
+
+	// Bad input creates nothing.
+	for name, c := range map[string]struct {
+		r    *http.Request
+		code int
+	}{
+		"empty":    {multipartReq(t, map[string]string{"title": "  ", "body": "\n"}), 400},
+		"gif":      {multipartReq(t, map[string]string{"title": "x"}, "GIF89a"), 400},
+		"too big":  {multipartReq(t, map[string]string{"title": "x"}, png+strings.Repeat("x", maxScreenshot)), 413},
+		"too many": {multipartReq(t, map[string]string{"title": "x"}, many...), 413},
+		"one bad":  {multipartReq(t, map[string]string{"title": "x"}, png, "GIF89a"), 400},
+	} {
+		if w := send(c.r); w.Code != c.code {
+			t.Errorf("%s: %d %s", name, w.Code, w.Body)
+		}
+	}
+	if w := do(h, "POST", "/api/notes", "", `{"title":"x"}`); w.Code != 400 {
+		t.Errorf("json: %d", w.Code)
+	}
+	if ts, _ := s.List(); len(ts) != 0 || out.Len() != 0 {
+		t.Fatalf("bad input created tickets: %v %q", ts, out.String())
+	}
+	if _, err := os.Stat(filepath.Join(s.Dir, "assets")); err == nil {
+		t.Fatal("bad input saved images")
+	}
+
+	// A Shortcut request: multi-line note, two screenshots.
+	w := send(multipartReq(t, map[string]string{"title": "Button overlaps\nOn the settings page."}, png, jpeg))
+	if w.Code != 201 || w.Body.String() != "Ticket #1000 created: Button overlaps\n" {
+		t.Fatalf("create: %d %q", w.Code, w.Body)
+	}
+	got := readFile(t, s, "1000-button-overlaps.md")
+	for _, want := range []string{"\nstatus: inbox\n", "\nsource: human\n", "\nscreenshot: tickets/assets/1000.png\n",
+		"\nOn the settings page.\n\n![Screenshot](assets/1000.png)\n\n![Screenshot](assets/1000-2.jpg)\n"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("ticket missing %q:\n%s", want, got)
+		}
+	}
+	for name, want := range map[string]string{"1000.png": png, "1000-2.jpg": jpeg} {
+		if b, _ := os.ReadFile(filepath.Join(s.Dir, "assets", name)); string(b) != want {
+			t.Errorf("assets/%s = %q", name, b)
+		}
+	}
+	if !strings.Contains(out.String(), "EVENT created #1000 ") || !strings.Contains(out.String(), "EVENT screenshot #1000 tickets/assets/1000-2.jpg") {
+		t.Fatalf("events: %q", out.String())
+	}
+
+	// An image alone gets a placeholder title; text alone needs no image.
+	if w := send(multipartReq(t, nil, png)); w.Code != 201 || !strings.Contains(w.Body.String(), "#1001 created: Screenshot") {
+		t.Fatalf("image only: %d %q", w.Code, w.Body)
+	}
+	if w := send(multipartReq(t, map[string]string{"body": "Body only\nmore"})); w.Code != 201 || !strings.Contains(w.Body.String(), "#1002 created: Body only") {
+		t.Fatalf("text only: %d %q", w.Code, w.Body)
+	}
+
+	// Browsers from other sites stay out; the phone page names the tailnet address.
+	r := multipartReq(t, map[string]string{"title": "x"})
+	r.Header.Set("Origin", "https://evil.example")
+	if w := send(r); w.Code != 403 {
+		t.Fatalf("foreign origin: %d", w.Code)
+	}
+	defer func(h string) { tailnetHost = h }(tailnetHost)
+	tailnetHost = "box.tail.ts.net"
+	r = httptest.NewRequest("GET", "/phone", nil)
+	r.Host = "box.tail.ts.net:18090"
+	if w := send(r); w.Code != 200 || !strings.Contains(w.Body.String(), "<code>https://box.tail.ts.net:18090/api/notes</code>") {
+		t.Fatalf("phone page: %d %s", w.Code, w.Body)
 	}
 }

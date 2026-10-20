@@ -16,6 +16,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -212,6 +213,11 @@ func newServer(st *Store, unsafeAny bool, events io.Writer) http.Handler {
 		reply(w, t, err)
 	}))
 	mux.HandleFunc("POST /api/tickets/{id}/screenshot", s.withID(s.screenshot))
+	mux.HandleFunc("POST /api/notes", s.note)
+	mux.HandleFunc("GET /phone", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		phonePage.Execute(w, noteURL(r))
+	})
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !unsafeAny && !loopbackHost(r.Host) {
@@ -323,6 +329,132 @@ func (s *server) screenshot(w http.ResponseWriter, r *http.Request, id int) {
 	}
 	reply(w, t, err)
 }
+
+// maxNoteImages caps one POST /api/notes. Each image is still at most maxScreenshot.
+const maxNoteImages = 10
+
+// note files an inbox ticket and its images in one multipart request, so an
+// iOS Shortcut can call it: text fields title and body (the first line of
+// title + body becomes the title), and any number of image file parts.
+func (s *server) note(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxNoteImages*maxScreenshot+1<<20)
+	if err := r.ParseMultipartForm(8 << 20); err != nil {
+		var tooBig *http.MaxBytesError
+		if errors.As(err, &tooBig) {
+			http.Error(w, "request too large", http.StatusRequestEntityTooLarge)
+			return
+		}
+		http.Error(w, "send a multipart form with title, body and image files", http.StatusBadRequest)
+		return
+	}
+	defer r.MultipartForm.RemoveAll()
+	var imgs [][]byte
+	var keys []string
+	for k := range r.MultipartForm.File {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	for _, k := range keys {
+		for _, fh := range r.MultipartForm.File[k] {
+			if len(imgs) == maxNoteImages {
+				http.Error(w, fmt.Sprintf("too many images (max %d)", maxNoteImages), http.StatusRequestEntityTooLarge)
+				return
+			}
+			if fh.Size > maxScreenshot {
+				http.Error(w, "image too large (max 5 MB)", http.StatusRequestEntityTooLarge)
+				return
+			}
+			f, err := fh.Open()
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			data, err := io.ReadAll(f)
+			f.Close()
+			if _, ok := imageExt[http.DetectContentType(data)]; err != nil || !ok {
+				http.Error(w, "images must be PNG, JPEG or WebP", http.StatusBadRequest)
+				return
+			}
+			imgs = append(imgs, data)
+		}
+	}
+	title, body, _ := strings.Cut(strings.TrimSpace(r.FormValue("title")+"\n"+r.FormValue("body")), "\n")
+	if strings.TrimSpace(title) == "" {
+		if len(imgs) == 0 {
+			http.Error(w, "send a title, a body or an image", http.StatusBadRequest)
+			return
+		}
+		title = "Screenshot"
+	}
+	t, err := s.store.Create(NewTicket{Title: title, Body: body})
+	if err != nil {
+		reply(w, nil, err)
+		return
+	}
+	s.event("created #%d %s %s %s %q", t.ID, t.Type, t.Area, t.Priority, t.Title)
+	for _, data := range imgs {
+		_, rel, err := s.store.AddImage(t.ID, data)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("ticket #%d created, but an image failed: %v", t.ID, err), http.StatusInternalServerError)
+			return
+		}
+		s.event("screenshot #%d %s", t.ID, rel)
+	}
+	// Plain text, so a Shortcut can show it as a notification as is.
+	w.WriteHeader(http.StatusCreated)
+	fmt.Fprintf(w, "Ticket #%d created: %s\n", t.ID, t.Title)
+}
+
+// noteURL is the POST /api/notes address as the phone sees it. tailscale
+// serve answers over https and keeps the Host header.
+func noteURL(r *http.Request) string {
+	h, _, err := net.SplitHostPort(r.Host)
+	if err != nil {
+		h = r.Host
+	}
+	scheme := "http"
+	if tailnetHost != "" && h == tailnetHost {
+		scheme = "https"
+	}
+	return scheme + "://" + r.Host + "/api/notes"
+}
+
+var phonePage = template.Must(template.New("phone").Parse(`<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phone setup</title>
+<style>
+:root { color-scheme: light dark; --text: #1A1C2B; --page: #fff; --muted: #5D6274; --line: #C9D1F5; }
+@media (prefers-color-scheme: dark) { :root { --text: #E7E9F2; --page: #14151F; --muted: #A3A8BC; --line: #3A4272; } }
+body { margin: 0 auto; max-width: 640px; padding: 16px; background: var(--page); color: var(--text); font: 16px/1.5 system-ui, -apple-system, sans-serif; }
+h1 { font-size: 22px; margin: 8px 0 4px; } h2 { font-size: 17px; margin: 24px 0 4px; }
+p, li { color: var(--text); } .muted { color: var(--muted); } li { margin: 6px 0; }
+code { font: 14px ui-monospace, monospace; background: color-mix(in srgb, var(--line) 40%, transparent); border-radius: 4px; padding: 1px 4px; word-break: break-all; }
+</style></head><body>
+<h1>Send screenshots from your iPhone</h1>
+<p class="muted">You make an iOS Shortcut one time. Then you share a screenshot to it, type a note, and the board gets an inbox ticket with the image.</p>
+<h2>Before you start</h2>
+<p>The phone must be on your tailnet (the Tailscale app is connected). The Shortcut sends to this address:</p>
+<p><code>{{.}}</code></p>
+<h2>Make the Shortcut</h2>
+<ol>
+<li>Open the Shortcuts app. Tap <b>+</b> to make a new Shortcut. Name it <b>Send to board</b>.</li>
+<li>Tap the info button (i) and turn on <b>Show in Share Sheet</b>. In the first action, set <b>Receive Images from Share Sheet</b>. If there is no input, set <b>Stop and Respond</b>.</li>
+<li>Add the action <b>Ask for Input</b>. Set the type to <b>Text</b> and the prompt to <b>Note</b>. Turn on <b>Allow Multiple Lines</b> if you want a body.</li>
+<li>Add the action <b>Get Contents of URL</b>. Set the URL to the address above. Tap <b>Show More</b>.</li>
+<li>Set <b>Method</b> to <b>POST</b> and <b>Request Body</b> to <b>Form</b>.</li>
+<li>Add a <b>Text</b> field. Set the key to <code>title</code> and the value to the <b>Provided Input</b> variable.</li>
+<li>Add a <b>File</b> field. Set the key to <code>image</code> and the value to the <b>Shortcut Input</b> variable.</li>
+<li>Add the action <b>Show Notification</b>. Set its text to the <b>Contents of URL</b> variable.</li>
+</ol>
+<h2>Use it</h2>
+<ol>
+<li>Take a screenshot. Tap the thumbnail, then tap the share button.</li>
+<li>Tap <b>Send to board</b>. Type the note and tap <b>Done</b>.</li>
+<li>The notification shows the new ticket number, for example <code>Ticket #1340 created: Button overlaps</code>.</li>
+</ol>
+<p class="muted">The first line of the note becomes the title. The other lines become the body. Each image must be 5 MB or less, and one request takes 10 images at most. If a photo is too large, add <b>Convert Image</b> (format JPEG) before Get Contents of URL.</p>
+</body></html>
+`))
 
 // ---- board ----
 
