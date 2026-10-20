@@ -130,7 +130,8 @@ button { cursor: pointer; }
 #menu button:hover, #menu a:hover, #menu label:hover { background: color-mix(in srgb, var(--raspberry) 10%, transparent); }
 #menu .tip { padding: 8px; color: var(--graphite); font-size: 12px; border-top: 1px solid var(--line); margin-top: 4px; }
 #toast { right: 34px; top: calc(50% + 30px); background: var(--ink); color: #fff; border-radius: 10px; padding: 8px 12px; display: flex; gap: 10px; align-items: center; box-shadow: 0 6px 20px rgba(15,16,25,.3); }
-#toast span { color: #fff; } #toast a { color: #AEBBFF; font-weight: 600; }
+/* Taps pass through the toast text to the page (picking mode); only its link is live. */
+#toast { pointer-events: none; } #toast span { color: #fff; } #toast a { color: #AEBBFF; font-weight: 600; pointer-events: auto; }
 kbd { font: 600 11px/1 ui-monospace, monospace; border: 1px solid var(--line); border-radius: 4px; padding: 1px 4px; }
 #save { margin-left: auto; }
 /* Chosen or pasted images, each with a remove button. */
@@ -450,7 +451,7 @@ kbd { font: 600 11px/1 ui-monospace, monospace; border: 1px solid var(--line); b
     $("m-shots").checked = store.get("shots") === "1";
     $("m-shots-row").hidden = !navigator.mediaDevices?.getDisplayMedia;
   }
-  $("fab").onclick = () => { if (picking) return pick(false); $("menu").hidden = !$("menu").hidden; store.set("seen", "1"); syncMenu(); };
+  $("fab").onclick = () => { if (picking) return pick(false); $("menu").hidden = !$("menu").hidden; syncMenu(); };
   function pick(on) {
     picking = on; $("menu").hidden = true;
     if (on) { if (!pinsOn) { pinsOn = true; store.set("pins", "1"); renderPins(); } toast(null, "Tap anything to drop a note"); clearTimeout(toastTimer); }
@@ -524,7 +525,6 @@ kbd { font: 600 11px/1 ui-monospace, monospace; border: 1px solid var(--line); b
     syncMenu();
     setEnabled(enabled);
     if (enabled) restoreDraft();
-    if (enabled && store.get("seen") !== "1") { $("menu").hidden = false; store.set("seen", "1"); }
   }
   if (document.body) mount(); else addEventListener("DOMContentLoaded", mount);
 
