@@ -266,7 +266,8 @@ kbd { font: 600 11px/1 ui-monospace, monospace; border: 1px solid var(--line); b
     f.forEach((file, i) => {
       const d = document.createElement("div"); d.className = "thumb";
       const img = document.createElement("img"); img.alt = `Image ${i + 1}`;
-      img.src = URL.createObjectURL(file); img.onload = img.onerror = () => URL.revokeObjectURL(img.src);
+      // A data: URL, not blob:, since strict page CSPs (the auth pages) often allow only data: in img-src.
+      const r = new FileReader(); r.onload = () => { img.src = r.result; }; r.readAsDataURL(file);
       const x = document.createElement("button"); x.type = "button"; x.setAttribute("aria-label", `Remove image ${i + 1}`);
       x.innerHTML = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">${ICONS.wontfix}</svg>`;
       x.onclick = () => queue(queued.filter((_, j) => j !== i));
