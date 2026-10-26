@@ -605,7 +605,21 @@ func (s *Store) Update(id int, p Patch) (Ticket, error) {
 	})
 }
 
+// humanAuthors are the note authors the board and devnotes send for a person.
+// Agents write notes as "claude", "agent-..." or no name.
+var humanAuthors = map[string]bool{"human": true}
+
+// reopened is the status a ticket moves to when a human adds a note: a reply on
+// a blocked, review or done ticket means there is work to do again.
+func reopened(status, by string) string {
+	if humanAuthors[by] && (status == "blocked" || status == "review" || status == "done") {
+		return "todo"
+	}
+	return status
+}
+
 // AddNote appends a dated line to "## Notes", creating the section if needed.
+// A note from a human on a blocked, review or done ticket moves it back to todo.
 func (s *Store) AddNote(id int, text, by string) (Ticket, error) {
 	text = strings.TrimSpace(text)
 	if text == "" {
@@ -623,6 +637,9 @@ func (s *Store) AddNote(id int, text, by string) (Ticket, error) {
 			stamp += " (" + by + ")"
 		}
 		d.body = b + "\n- " + stamp + ": " + strings.ReplaceAll(text, "\n", "\n  ") + "\n"
+		if st := d.fields()["status"]; reopened(st, by) != st {
+			d.set("status", reopened(st, by))
+		}
 		return nil
 	})
 }

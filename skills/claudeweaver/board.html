@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1">
 <title>Claudeweaver</title>
 <style>
 :root {
@@ -37,7 +37,12 @@ header h1 span { color: var(--graphite); font-weight: 500; letter-spacing: 0; ma
 .filters { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; flex: 1; }
 .field { height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); }
 .field:focus { border-color: var(--raspberry); outline: none; }
-input[type=search].field { width: 220px; }
+input[type=search].field { width: 220px; padding-right: 34px; }
+input[type=search]::-webkit-search-cancel-button { display: none; }
+.search { position: relative; display: flex; }
+#q-clear { position: absolute; right: 0; top: 0; bottom: 0; width: 34px; display: grid; place-items: center; border: 0; background: none; color: var(--graphite); cursor: pointer; border-radius: 8px; }
+#q-clear:hover { color: var(--text); }
+#q:placeholder-shown + #q-clear { display: none; }
 .toggle { display: flex; align-items: center; gap: 6px; color: var(--graphite); font-size: 14px; cursor: pointer; }
 .btn { height: 34px; padding: 0 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--paper); cursor: pointer; font-weight: 600; font-size: 14px; }
 .btn:hover { background: var(--hover); }
@@ -71,13 +76,14 @@ body:not(.closed) .col[data-status=wontfix] { display: none; }
 
 #panel { position: fixed; inset: 0 0 0 auto; width: min(600px, 100vw); background: var(--paper); border-left: 1px solid var(--line); box-shadow: -12px 0 32px rgba(15,16,25,.12); display: flex; flex-direction: column; transform: translateX(100%); transition: transform .15s ease-out; z-index: 10; }
 #panel.open { transform: none; }
-#panel:not(.open) { box-shadow: none; } /* its shadow peeked in at the right edge */
+/* Closed, it sits off the right edge: hide it after the slide so it adds no width (iOS zoomed out to show it) and takes no focus. */
+#panel:not(.open) { box-shadow: none; visibility: hidden; transition: transform .15s ease-out, visibility 0s .15s; }
 /* Blocked waits for the human, so its header is red and has a stop sign. */
 .col[data-status=blocked] h2 { color: var(--blocked); }
 .col h2 .stop { align-self: center; flex: none; }
 .spin { align-self: center; flex: none; color: var(--raspberry); animation: spin 1.2s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { #panel, .col ol { transition: none; } .spin { animation: none; } }
+@media (prefers-reduced-motion: reduce) { #panel, #panel:not(.open), .col ol { transition: none; } .spin { animation: none; } }
 #panel .top { display: flex; align-items: center; gap: 10px; padding: 14px 20px; border-bottom: 1px solid var(--line); }
 #panel .top .id { color: var(--graphite); font-weight: 600; }
 #panel .top .file { color: var(--graphite); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
@@ -120,6 +126,31 @@ textarea.field { height: auto; min-height: 160px; padding: 10px; resize: vertica
 #lightbox::backdrop { background: rgba(15,16,25,.72); }
 kbd { font: 500 11px ui-monospace, monospace; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; background: var(--paper); }
 .hint { color: var(--graphite); font-size: 12px; padding: 0 20px 12px; }
+/* Touch: 16px text so iOS does not zoom into a field, and 44px targets. */
+@media (pointer: coarse) {
+  .field, .btn { height: 44px; font-size: 16px; }
+  textarea.field { height: auto; }
+  #q-clear { width: 44px; }
+  input[type=search].field { padding-right: 44px; }
+  .tabs button { min-height: 36px; padding: 0 14px; font-size: 14px; }
+  .toggle { min-height: 36px; }
+}
+html, body { overflow-x: hidden; } /* nothing may push the page sideways; lanes scroll inside #columns */
+/* Select mode: tap cards to pick them, then move them all from the bar at the bottom. */
+.btn { display: inline-flex; align-items: center; gap: 6px; }
+#select[aria-pressed=true] { background: var(--selected); border-color: var(--raspberry); }
+body.selecting .card { position: relative; padding-left: 42px; }
+body.selecting .card::before { content: ""; position: absolute; left: 13px; top: 12px; width: 18px; height: 18px; border: 2px solid var(--graphite); border-radius: 6px; }
+body.selecting .card[aria-selected=true] { border-color: var(--raspberry); background: color-mix(in srgb, var(--raspberry) 8%, var(--paper)); }
+body.selecting .card[aria-selected=true]::before { background: var(--raspberry); border-color: var(--raspberry); }
+body.selecting .card[aria-selected=true]::after { content: ""; position: absolute; left: 20px; top: 15px; width: 5px; height: 10px; border: solid var(--on-accent); border-width: 0 2.5px 2.5px 0; transform: rotate(45deg); }
+#bulk { position: fixed; left: 8px; right: 8px; bottom: calc(8px + env(safe-area-inset-bottom)); z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; background: var(--paper); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 -4px 30px rgba(15,16,25,.22); animation: rise .16s ease-out; max-width: 640px; margin: 0 auto; }
+[hidden] { display: none !important; }
+#bulk-n { font-weight: 700; margin-right: auto; }
+body.selecting #columns { padding-bottom: 96px; }
+@keyframes rise { from { opacity: 0; transform: translateY(12px); } }
+@media (prefers-reduced-motion: reduce) { #bulk { animation: none; } }
+@media (max-width: 520px) { #bulk-n { flex-basis: 100%; } #bulk .field { flex: 1; min-width: 0; } }
 #lanes { display: none; position: relative; gap: 6px; overflow-x: auto; padding: 10px 16px 0; scrollbar-width: none; }
 @media (max-width: 720px) {
   header { padding: 12px 16px; }
@@ -127,7 +158,8 @@ kbd { font: 500 11px ui-monospace, monospace; border: 1px solid var(--line); bor
   .filters { order: 1; flex-basis: 100%; }
   .filters .field { flex: 1; min-width: 0; }
   .filters .toggle { flex-basis: 100%; }
-  input[type=search].field { flex-basis: 100%; }
+  .search { flex-basis: 100%; }
+  input[type=search].field { width: 100%; }
   .selects { grid-template-columns: repeat(2, 1fr); }
   /* Phones: one lane at a time. Swipe, or tap a lane in the picker. */
   #columns { padding: 10px 16px 12px; gap: 16px; grid-auto-columns: 100%; scroll-snap-type: x mandatory; scroll-padding-inline: 16px; }
@@ -147,12 +179,13 @@ kbd { font: 500 11px ui-monospace, monospace; border: 1px solid var(--line); bor
 <header>
   <h1>Tickets<span id="total">{{.Total}}</span></h1>
   <div class="filters" role="search">
-    <input type="search" class="field" id="q" placeholder="Search" aria-label="Search tickets">
+    <span class="search"><input type="search" class="field" id="q" placeholder="Search" aria-label="Search tickets"><button type="button" id="q-clear" aria-label="Clear search" title="Clear search"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button></span>
     <select class="field" id="f-area" aria-label="Area"><option value="">All areas</option>{{range .Areas}}<option>{{.}}</option>{{end}}</select>
     <select class="field" id="f-type" aria-label="Type"><option value="">All types</option>{{range .Types}}<option>{{.}}</option>{{end}}</select>
     <select class="field" id="f-prio" aria-label="Priority"><option value="">All priorities</option>{{range .Priorities}}<option>{{.}}</option>{{end}}</select>
     <label class="toggle"><input type="checkbox" id="f-closed"> Show won't fix</label>
   </div>
+  <button class="btn" id="select" aria-pressed="false">Select</button>
   <button class="btn primary" id="new" title="Shortcut: N">New ticket</button>
 </header>
 <form id="quick" hidden autocomplete="off">
@@ -162,12 +195,19 @@ kbd { font: 500 11px ui-monospace, monospace; border: 1px solid var(--line); bor
 <nav id="lanes" aria-label="Lanes"></nav>
 {{template "columns" .}}
 <div class="hint"><kbd>N</kbd> new &nbsp; <kbd>J</kbd> <kbd>K</kbd> move between cards &nbsp; <kbd>Enter</kbd> open &nbsp; <kbd>1</kbd>&ndash;<kbd>6</kbd> move to column &nbsp; <kbd>E</kbd> edit title (or double-click it) &nbsp; Drag cards between columns. Paste or drop a screenshot into quick add or the panel.</div>
+<div id="bulk" role="toolbar" aria-label="Selected tickets" hidden>
+  <span id="bulk-n">0 selected</span>
+  <select class="field" id="bulk-move" aria-label="Move selected to"><option value="">Move to...</option>{{range .Statuses}}<option value="{{.}}">{{index $.Labels .}}</option>{{end}}</select>
+  <button class="btn primary" id="bulk-done"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Mark done</button>
+  <button class="btn" id="bulk-cancel">Cancel</button>
+</div>
 <dialog id="lightbox"><img alt="Screenshot"></dialog>
 
 <aside id="panel" aria-label="Ticket" aria-hidden="true">
   <div class="top">
     <span class="id" id="p-id"></span><span class="file mono" id="p-file"></span>
     <span class="msg" id="p-msg" role="status"></span>
+    <button class="btn" id="p-done"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Mark done</button>
     <button class="btn" id="p-close" aria-label="Close">Close</button>
   </div>
   <form class="scroll" id="p-form">
@@ -233,7 +273,36 @@ kbd { font: 500 11px ui-monospace, monospace; border: 1px solid var(--line); bor
       col.querySelector(".n").textContent = n;
     }
     renderLanes();
+    for (const c of document.querySelectorAll(".card")) c.setAttribute("aria-selected", selected.has(c.dataset.id)); // survives refresh
   }
+
+  // ---- select mode: pick cards, then move them all ----
+  let selecting = false;
+  const selected = new Set();
+  function setSelecting(on) {
+    selecting = on; selected.clear();
+    document.body.classList.toggle("selecting", on);
+    $("#select").setAttribute("aria-pressed", on);
+    if (on && panel.classList.contains("open")) close();
+    syncBulk(); applyFilters();
+  }
+  function toggleSel(id) { selected.has(id) ? selected.delete(id) : selected.add(id); syncBulk(); applyFilters(); }
+  function syncBulk() {
+    $("#bulk").hidden = !selecting;
+    $("#bulk-n").textContent = selected.size + " selected";
+    $("#bulk-move").disabled = $("#bulk-done").disabled = !selected.size;
+    $("#bulk-move").value = "";
+  }
+  async function moveSelected(status) {
+    const ids = [...selected];
+    const failed = (await Promise.allSettled(ids.map((id) => api("PATCH", `/api/tickets/${id}`, { status })))).filter((r) => r.status === "rejected");
+    if (failed.length) alert(`Could not move ${failed.length} of ${ids.length}: ${failed[0].reason.message}`);
+    setSelecting(false); refresh();
+  }
+  $("#select").onclick = () => setSelecting(!selecting);
+  $("#bulk-cancel").onclick = () => setSelecting(false);
+  $("#bulk-done").onclick = () => moveSelected("done");
+  $("#bulk-move").onchange = () => { if ($("#bulk-move").value) moveSelected($("#bulk-move").value); };
 
   // ---- lane picker: phones show one lane at a time ----
   const lanes = $("#lanes");
@@ -261,6 +330,7 @@ kbd { font: 500 11px ui-monospace, monospace; border: 1px solid var(--line); bor
   }
   document.addEventListener("scroll", (e) => { if (e.target.id === "columns") markLane(); }, true);
   for (const id of ["#q", "#f-area", "#f-type", "#f-prio", "#f-closed"]) $(id).addEventListener("input", applyFilters);
+  $("#q-clear").onclick = () => { $("#q").value = ""; applyFilters(); $("#q").focus(); };
 
   // ---- refresh ----
   async function refresh() {
@@ -380,6 +450,7 @@ kbd { font: 500 11px ui-monospace, monospace; border: 1px solid var(--line); bor
   let clickTimer;
   document.addEventListener("click", (e) => {
     const c = e.target.closest?.(".card"); if (!c || e.target.isContentEditable) return;
+    if (selecting) { toggleSel(c.dataset.id); return; }
     clearTimeout(clickTimer);
     if (e.target.closest("h3")) clickTimer = setTimeout(() => openTicket(c.dataset.id), 250); // wait to see if it is a double-click
     else openTicket(c.dataset.id);
@@ -427,7 +498,9 @@ kbd { font: 500 11px ui-monospace, monospace; border: 1px solid var(--line); bor
     .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
   function md(src) {
     const out = []; let list = null, para = [], code = null;
-    const flush = () => { if (para.length) out.push("<p>" + para.map(inline).join("<br>") + "</p>"); para = []; if (list) { out.push(`</${list}>`); list = null; } };
+    // Hard-wrapped source lines flow as one paragraph; two trailing spaces force a break.
+    const flow = (ls) => ls.map((l, i) => inline(l.trim()) + (i === ls.length - 1 ? "" : / {2}$/.test(l) ? "<br>" : " ")).join("");
+    const flush = () => { if (para.length) out.push("<p>" + flow(para) + "</p>"); para = []; if (list) { out.push(`</${list}>`); list = null; } };
     for (const line of src.split("\n")) {
       if (code !== null) { if (line.startsWith("```")) { out.push("<pre><code>" + esc(code) + "</code></pre>"); code = null; } else code += (code ? "\n" : "") + line; continue; }
       if (line.startsWith("```")) { flush(); code = ""; continue; }
@@ -439,7 +512,7 @@ kbd { font: 500 11px ui-monospace, monospace; border: 1px solid var(--line); bor
         if (list !== kind) { if (list) out.push(`</${list}>`); out.push(`<${kind}>`); list = kind; }
         out.push(`<li>${inline(m[2])}</li>`); continue;
       }
-      if (/^\s+\S/.test(line) && list) { out[out.length - 1] = out[out.length - 1].replace(/<\/li>$/, "<br>" + inline(line.trim()) + "</li>"); continue; }
+      if (/^\s+\S/.test(line) && list) { out[out.length - 1] = out[out.length - 1].replace(/<\/li>$/, " " + inline(line.trim()) + "</li>"); continue; }
       if (!line.trim()) { flush(); continue; }
       if (list) { out.push(`</${list}>`); list = null; }
       para.push(line);
@@ -508,15 +581,25 @@ kbd { font: 500 11px ui-monospace, monospace; border: 1px solid var(--line); bor
     if (id) document.querySelector(`.card[data-id="${id}"]`)?.focus();
   }
   $("#p-close").onclick = close;
+  $("#p-done").onclick = () => { $("#p-status").value = "done"; close(); }; // close saves the change
+  // A click outside the panel closes it. Cards switch tickets instead; the lightbox handles its own clicks.
+  document.addEventListener("click", (e) => {
+    if (!panel.classList.contains("open")) return;
+    const path = e.composedPath();
+    if (path.includes(panel) || path.includes($("#lightbox")) || path.some((n) => n.classList?.contains("card"))) return;
+    close();
+  });
   // Framed by the devnotes overlay: Escape with nothing open asks the app to close the board.
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && parent !== window && !panel.classList.contains("open") && !$("#lightbox").open && quick.hidden) parent.postMessage("claudeweaver-board:close", "*");
+    if (e.key === "Escape" && parent !== window && !panel.classList.contains("open") && !$("#lightbox").open && quick.hidden && !selecting) parent.postMessage("claudeweaver-board:close", "*");
   });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && panel.classList.contains("open") && !$("#lightbox").open) close(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && selecting) setSelecting(false); });
 
   const setVal = (el, v) => { if (el.value !== v) el.value = v; }; // keeps the caret when nothing changed
   function fill(t) {
     loaded = t;
+    $("#p-done").hidden = t.status === "done";
     $("#p-id").textContent = "#" + t.id;
     $("#p-file").textContent = t.file;
     setVal($("#title"), t.title);
@@ -574,7 +657,7 @@ kbd { font: 500 11px ui-monospace, monospace; border: 1px solid var(--line); bor
   });
   $("#p-addnote").onclick = async () => {
     const text = $("#p-note").value.trim(); if (!text || !current) return;
-    try { const t = await api("POST", `/api/tickets/${current}/notes`, { text, by: "human" }); $("#p-note").value = ""; $("#p-notes").innerHTML = md(t.notes); }
+    try { const t = await api("POST", `/api/tickets/${current}/notes`, { text, by: "human" }); $("#p-note").value = ""; $("#p-notes").innerHTML = md(t.notes); if (!dirty) fill(t); refresh(); } // a reply can reopen it
     catch (err) { msg(err.message, true); }
   };
 

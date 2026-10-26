@@ -206,9 +206,14 @@ func newServer(st *Store, unsafeAny bool, events io.Writer) http.Handler {
 		if !decode(w, r, &n) {
 			return
 		}
+		old, _ := st.Get(id)
 		t, err := st.AddNote(id, n.Text, n.By)
 		if err == nil {
-			s.event("note #%d %q", id, oneLine(n.Text, 120))
+			moved := ""
+			if old.Status != t.Status {
+				moved = " status=" + t.Status // a human reply reopened it
+			}
+			s.event("note #%d %q%s", id, oneLine(n.Text, 120), moved)
 		}
 		reply(w, t, err)
 	}))

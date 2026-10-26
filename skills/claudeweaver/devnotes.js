@@ -444,7 +444,7 @@ kbd { font: 600 11px/1 ui-monospace, monospace; border: 1px solid var(--line); b
     const meta = document.createElement("div"); meta.className = "meta row";
     const st = document.createElement("span"); st.className = `st s-${t.status}`; st.innerHTML = icon(t.status); st.append(t.status);
     meta.append(st, `#${t.id}, ${t.type}, ${t.priority}`); meta.style.marginTop = "0";
-    const body = document.createElement("div"); body.className = "body"; body.textContent = t.body || ""; body.hidden = !t.body;
+    const body = document.createElement("div"); body.className = "body"; body.textContent = (t.body || "").replace(/(\S)\n(?=\S)(?![-*] |\d+\. |#)/g, "$1 "); body.hidden = !t.body; // hard-wrapped lines flow
     const sel = document.createElement("select"); sel.setAttribute("aria-label", "Status");
     for (const s of ["inbox", "todo", "doing", "blocked", "review", "done", "wontfix"]) sel.append(new Option(s, s, false, s === t.status));
     const note = document.createElement("textarea"); note.placeholder = "Add a note"; note.setAttribute("aria-label", "Add a note");

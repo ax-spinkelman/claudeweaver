@@ -646,3 +646,31 @@ func TestColumnsNewestFirst(t *testing.T) {
 		t.Fatalf("todo order %v, inbox %v", got, cols[0].Tickets)
 	}
 }
+
+func TestHumanNoteReopens(t *testing.T) {
+	s := fixedStore(t)
+	cases := []struct{ status, by, want string }{
+		{"blocked", "human", "todo"},
+		{"review", "human", "todo"},
+		{"done", "human", "todo"},
+		{"doing", "human", "doing"},
+		{"inbox", "human", "inbox"},
+		{"blocked", "claude", "blocked"},
+		{"review", "agent-tickets", "review"},
+		{"blocked", "", "blocked"},
+	}
+	for i, c := range cases {
+		id := 300 + i
+		writeFile(t, s, fmt.Sprintf("%04d-x.md", id), fmt.Sprintf("---\nid: %d\ntitle: X\nstatus: %s\n---\n\nHello.\n", id, c.status))
+		got, err := s.AddNote(id, "a reply", c.by)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Status != c.want {
+			t.Errorf("note by %q on %s: status %s, want %s", c.by, c.status, got.Status, c.want)
+		}
+		if f := readFile(t, s, fmt.Sprintf("%04d-x.md", id)); !strings.Contains(f, "status: "+c.want+"\n") {
+			t.Errorf("file for %s/%q not written with status %s:\n%s", c.status, c.by, c.want, f)
+		}
+	}
+}
