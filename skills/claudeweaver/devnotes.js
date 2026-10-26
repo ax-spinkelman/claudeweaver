@@ -159,15 +159,32 @@ kbd { font: 600 11px/1 ui-monospace, monospace; border: 1px solid var(--line); b
 #photos input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 @media (pointer: coarse) { #photos { display: inline-flex; } }
 /* Touch: no Shift key, so the menu starts a pick and the note has a Save button. */
-@media (pointer: coarse) { .row .hint { display: none; } #note textarea, #card textarea, #card select { font-size: 16px; } .pin { min-width: 28px; height: 28px; font-size: 12px; } }
+@media (pointer: coarse) { .row .hint { display: none; } #note textarea, #card textarea, #card select { font-size: 16px; } .pin { min-width: 28px; height: 28px; font-size: 12px; }
+  /* Touch: the menu is a bottom sheet with 48px rows and no keyboard tips; note buttons are 44px. */
+  #menu { left: 8px; right: 8px; top: auto; bottom: calc(8px + env(safe-area-inset-bottom)); width: auto; transform: none; border-radius: 16px; padding: 8px; box-shadow: 0 -4px 40px rgba(15,16,25,.35); animation: sheet .16s ease-out; }
+  #menu button, #menu a, #menu label { min-height: 48px; font-size: 16px; padding: 0 12px; border-radius: 10px; }
+  #menu .tip { display: none; }
+  .seg button, #note .btn, #card .btn { min-height: 44px; font-size: 15px; padding: 0 14px; }
+  #photos { min-height: 44px; font-size: 15px; } }
+@keyframes sheet { from { opacity: 0; transform: translateY(16px); } }
+@media (prefers-reduced-motion: reduce) { #menu { animation: none; } }
 @media (pointer: fine) { #save, #cancel { display: none; } }
 /* Phones: note and card sit at the bottom, above the on-screen keyboard. */
+/* The board, full screen over the app. */
+#board { inset: 0; display: flex; flex-direction: column; background: var(--paper); padding-top: env(safe-area-inset-top); visibility: hidden; opacity: 0; transform: translateY(12px); transition: opacity .16s ease-out, transform .16s ease-out, visibility 0s .16s; }
+#board.open { visibility: visible; opacity: 1; transform: none; transition: opacity .16s ease-out, transform .16s ease-out; }
+#board .bar { display: flex; align-items: center; gap: 2px; padding: 2px 4px 2px 16px; border-bottom: 1px solid var(--line); }
+#board h2 { margin: 0 auto 0 0; font: 700 16px/1.3 system-ui, sans-serif; color: var(--text); }
+#board .icon { width: 44px; height: 44px; display: grid; place-items: center; border: 0; background: none; border-radius: 10px; padding: 0; }
+#board .icon:hover { background: color-mix(in srgb, var(--raspberry) 10%, transparent); }
+#board iframe { flex: 1; width: 100%; border: 0; background: var(--paper); }
+@media (prefers-reduced-motion: reduce) { #board, #board.open { transition: none; } }
 @media (max-width: 520px) { #note, #card { left: 8px !important; right: 8px; top: auto !important; bottom: calc(8px + var(--kb, 0px)); width: auto; max-height: calc(100dvh - 16px - var(--kb, 0px)); overflow: auto; } #note::before { display: none; } #note { border-radius: 14px; } }
 </style>
 <div id="hl" hidden></div>
 <div id="pins"></div>
 <div id="note" class="ui" role="dialog" aria-label="New note" hidden>
-  <textarea id="text" aria-label="Note" placeholder="What is wrong here? First line becomes the title. Paste or drop an image to attach it."></textarea>
+  <textarea id="text" aria-label="Note" placeholder="What is wrong here? First line becomes the title."></textarea>
   <div class="row">
     <span class="seg" role="group" aria-label="Kind"><button type="button" id="k-bug" aria-pressed="true">Bug</button><button type="button" id="k-feat" aria-pressed="false">Feature</button></span>
     <span class="hint"><kbd>Enter</kbd> save <kbd>Esc</kbd> cancel</span>
@@ -181,13 +198,22 @@ kbd { font: 600 11px/1 ui-monospace, monospace; border: 1px solid var(--line); b
 <div id="menu" class="ui" hidden>
   <button type="button" id="m-pick">Drop a note</button>
   <button type="button" id="m-pins"></button>
-  <a id="m-board" target="_blank" rel="noopener">Open the board</a>
+  <a id="m-board" data-board="" target="_blank" rel="noopener">Open the board</a>
   <label id="m-shots-row"><input type="checkbox" id="m-shots"> Attach screenshots</label>
   <div class="tip"><kbd>Shift</kbd>+click anything to drop a note, or choose Drop a note and tap it. <kbd>Shift</kbd>+<kbd>D</kbd> hides all of this.</div>
 </div>
 <button id="fab" class="ui" type="button" aria-label="Dev notes"></button>
-<div id="toast" class="ui" role="status" hidden></div>`;
+<div id="toast" class="ui" role="status" hidden></div>
+<div id="board" class="ui" role="dialog" aria-modal="true" aria-label="Ticket board">
+  <div class="bar"><h2>Board</h2>
+    <a class="icon" id="b-tab" target="_blank" rel="noopener" aria-label="Open the board in a new tab" title="Open in a new tab"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></a>
+    <button type="button" class="icon" id="b-close" aria-label="Close the board" title="Close (Esc)"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+  </div>
+  <iframe id="b-frame" title="Ticket board"></iframe>
+</div>`;
   const $ = (id) => root.getElementById(id);
+  // Paste and drop need a keyboard or mouse; touch has the Photos button instead.
+  if (!matchMedia("(pointer: coarse)").matches) $("text").placeholder += " Paste or drop an image to attach it.";
   // Keep our typing and clicks away from the host app's handlers.
   for (const t of ["keydown", "keyup", "keypress", "input", "click", "mousedown", "pointerdown", "mouseup", "pointerup", "dblclick", "paste", "dragover", "drop"]) root.addEventListener(t, (e) => e.stopPropagation());
 
@@ -362,7 +388,7 @@ kbd { font: 600 11px/1 ui-monospace, monospace; border: 1px solid var(--line); b
     t.innerHTML = "";
     const s = document.createElement("span"); s.textContent = text || `Ticket #${id} created`;
     t.append(s);
-    if (id) { const a = document.createElement("a"); a.href = `${BOARD}/#t=${id}`; a.target = "_blank"; a.rel = "noopener"; a.textContent = "Open on board"; t.append(a); }
+    if (id) { const a = document.createElement("a"); a.href = `${BOARD}/#t=${id}`; a.dataset.board = id; a.target = "_blank"; a.rel = "noopener"; a.textContent = "Open on board"; t.append(a); }
     t.hidden = false;
     clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 5000);
   }
@@ -426,7 +452,7 @@ kbd { font: 600 11px/1 ui-monospace, monospace; border: 1px solid var(--line); b
     const row = document.createElement("div"); row.className = "row";
     const statusRow = document.createElement("div"); statusRow.className = "row"; statusRow.append(sel);
     const add = document.createElement("button"); add.className = "btn primary"; add.type = "button"; add.textContent = "Add note";
-    const open = document.createElement("a"); open.className = "btn"; open.href = `${BOARD}/#t=${t.id}`; open.target = "_blank"; open.rel = "noopener"; open.textContent = "Open on board";
+    const open = document.createElement("a"); open.className = "btn"; open.href = `${BOARD}/#t=${t.id}`; open.dataset.board = t.id; open.target = "_blank"; open.rel = "noopener"; open.textContent = "Open on board";
     row.append(add, open);
     if (t.status === "review") {
       const done = document.createElement("button"); done.className = "btn primary"; done.type = "button"; done.innerHTML = icon("done"); done.append("Done");
@@ -479,10 +505,31 @@ kbd { font: 600 11px/1 ui-monospace, monospace; border: 1px solid var(--line); b
     if (!$("m-shots").checked && stream) { stream.getTracks().forEach((t) => t.stop()); stream = null; }
   };
 
+  // ---- board overlay: the board in an iframe, full screen ----
+  const boardOpen = () => $("board").classList.contains("open");
+  function openBoard(id) {
+    const url = BOARD + "/" + (id ? "#t=" + id : "");
+    if (id || !$("b-frame").src) $("b-frame").src = url; // loads once; a ticket id moves the hash
+    $("b-tab").href = url;
+    $("menu").hidden = true; hideCard(); if (picking) pick(false);
+    $("board").classList.add("open");
+    $("b-close").focus();
+  }
+  function closeBoard() { if (!boardOpen()) return; $("board").classList.remove("open"); loadPins(); }
+  $("b-close").onclick = closeBoard;
+  // Escape inside the board's frame never reaches us, so the board posts this.
+  addEventListener("message", (e) => { if (e.origin === BOARD && e.data === "claudeweaver-board:close") closeBoard(); });
+  // Board links open the overlay. Cmd/Ctrl/Shift-click still opens a tab.
+  root.addEventListener("click", (e) => {
+    const a = e.target.closest?.("a[data-board]");
+    if (!a || e.metaKey || e.ctrlKey || e.shiftKey) return;
+    e.preventDefault(); openBoard(a.dataset.board);
+  });
+
   function setEnabled(on) {
     enabled = on; store.set("off", on ? "0" : "1");
     for (const id of ["fab", "pins"]) $(id).hidden = !on;
-    if (!on) { closeNote(); hideCard(); $("menu").hidden = true; $("toast").hidden = true; }
+    if (!on) { closeNote(); hideCard(); closeBoard(); $("menu").hidden = true; $("toast").hidden = true; }
     else loadPins();
   }
 
@@ -491,6 +538,7 @@ kbd { font: 600 11px/1 ui-monospace, monospace; border: 1px solid var(--line); b
   addEventListener("keydown", (e) => {
     if (e.key === "Shift" && enabled && !noteOpen()) { const el = document.elementFromPoint(mx, my); if (el && el !== host) highlight(el); }
     if ((e.key === "D" || e.key === "d") && e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey && !editable(e)) { e.preventDefault(); setEnabled(!enabled); }
+    if (e.key === "Escape" && boardOpen()) closeBoard();
     if (e.key === "Escape" && !$("card").hidden) hideCard();
     if (e.key === "Escape" && picking) pick(false);
   }, true);

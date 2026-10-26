@@ -71,6 +71,7 @@ body:not(.closed) .col[data-status=wontfix] { display: none; }
 
 #panel { position: fixed; inset: 0 0 0 auto; width: min(600px, 100vw); background: var(--paper); border-left: 1px solid var(--line); box-shadow: -12px 0 32px rgba(15,16,25,.12); display: flex; flex-direction: column; transform: translateX(100%); transition: transform .15s ease-out; z-index: 10; }
 #panel.open { transform: none; }
+#panel:not(.open) { box-shadow: none; } /* its shadow peeked in at the right edge */
 /* Blocked waits for the human, so its header is red and has a stop sign. */
 .col[data-status=blocked] h2 { color: var(--blocked); }
 .col h2 .stop { align-self: center; flex: none; }
@@ -119,6 +120,7 @@ textarea.field { height: auto; min-height: 160px; padding: 10px; resize: vertica
 #lightbox::backdrop { background: rgba(15,16,25,.72); }
 kbd { font: 500 11px ui-monospace, monospace; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; background: var(--paper); }
 .hint { color: var(--graphite); font-size: 12px; padding: 0 20px 12px; }
+#lanes { display: none; position: relative; gap: 6px; overflow-x: auto; padding: 10px 16px 0; scrollbar-width: none; }
 @media (max-width: 720px) {
   header { padding: 12px 16px; }
   header h1 { flex: 1; }
@@ -126,9 +128,19 @@ kbd { font: 500 11px ui-monospace, monospace; border: 1px solid var(--line); bor
   .filters .field { flex: 1; min-width: 0; }
   .filters .toggle { flex-basis: 100%; }
   input[type=search].field { flex-basis: 100%; }
-  #columns { padding: 12px 16px; grid-auto-columns: 84vw; }
   .selects { grid-template-columns: repeat(2, 1fr); }
+  /* Phones: one lane at a time. Swipe, or tap a lane in the picker. */
+  #columns { padding: 10px 16px 12px; gap: 16px; grid-auto-columns: 100%; scroll-snap-type: x mandatory; scroll-padding-inline: 16px; }
+  #lanes { display: flex; }
+  .hint { display: none; }
 }
+#lanes::-webkit-scrollbar { display: none; }
+#lanes button { flex: none; height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--paper); font-weight: 600; font-size: 13px; cursor: pointer; transition: background .12s, color .12s; }
+#lanes button .n { color: var(--graphite); font-weight: 500; margin-left: 4px; }
+#lanes button[data-status=blocked] { color: var(--blocked); }
+#lanes button[aria-current=true] { background: var(--raspberry); border-color: var(--raspberry); color: var(--on-accent); }
+#lanes button[aria-current=true] .n { color: inherit; opacity: .8; }
+@media (prefers-reduced-motion: reduce) { #lanes button { transition: none; } }
 </style>
 </head>
 <body>
@@ -147,6 +159,7 @@ kbd { font: 500 11px ui-monospace, monospace; border: 1px solid var(--line); bor
   <input class="field" id="quick-in" aria-label="New ticket" placeholder="Title, then Enter. Paste a screenshot.">
   <div class="msg" id="quick-msg" role="status"></div>
 </form>
+<nav id="lanes" aria-label="Lanes"></nav>
 {{template "columns" .}}
 <div class="hint"><kbd>N</kbd> new &nbsp; <kbd>J</kbd> <kbd>K</kbd> move between cards &nbsp; <kbd>Enter</kbd> open &nbsp; <kbd>1</kbd>&ndash;<kbd>6</kbd> move to column &nbsp; <kbd>E</kbd> edit title (or double-click it) &nbsp; Drag cards between columns. Paste or drop a screenshot into quick add or the panel.</div>
 <dialog id="lightbox"><img alt="Screenshot"></dialog>
@@ -219,7 +232,34 @@ kbd { font: 500 11px ui-monospace, monospace; border: 1px solid var(--line); bor
       }
       col.querySelector(".n").textContent = n;
     }
+    renderLanes();
   }
+
+  // ---- lane picker: phones show one lane at a time ----
+  const lanes = $("#lanes");
+  const visibleCols = () => [...document.querySelectorAll(".col")].filter((c) => getComputedStyle(c).display !== "none");
+  function renderLanes() {
+    lanes.replaceChildren(...visibleCols().map((c) => {
+      const b = document.createElement("button"); b.type = "button"; b.dataset.status = c.dataset.status;
+      const n = document.createElement("span"); n.className = "n"; n.textContent = c.querySelector(".n").textContent;
+      b.append(c.getAttribute("aria-label"), n);
+      b.onclick = () => document.querySelector(`.col[data-status="${c.dataset.status}"]`)?.scrollIntoView({ inline: "start", block: "nearest", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+      return b;
+    }));
+    markLane();
+  }
+  function markLane() {
+    const x = $("#columns").getBoundingClientRect().left;
+    let best = null, d = Infinity;
+    for (const b of lanes.children) {
+      const c = document.querySelector(`.col[data-status="${b.dataset.status}"]`), dd = Math.abs(c.getBoundingClientRect().left - x);
+      if (dd < d) { d = dd; best = b; }
+    }
+    if (!best || best.getAttribute("aria-current") === "true") return;
+    for (const b of lanes.children) b.setAttribute("aria-current", b === best);
+    lanes.scrollLeft = best.offsetLeft - 16;
+  }
+  document.addEventListener("scroll", (e) => { if (e.target.id === "columns") markLane(); }, true);
   for (const id of ["#q", "#f-area", "#f-type", "#f-prio", "#f-closed"]) $(id).addEventListener("input", applyFilters);
 
   // ---- refresh ----
@@ -230,7 +270,10 @@ kbd { font: 500 11px ui-monospace, monospace; border: 1px solid var(--line); bor
       const focused = document.activeElement?.closest?.(".card")?.dataset.id;
       const qFocus = document.activeElement === qin && [qin.selectionStart, qin.selectionEnd];
       const tmp = document.createElement("div"); tmp.innerHTML = html;
-      $("#columns").replaceWith(tmp.firstElementChild);
+      const old = $("#columns"), x = old.scrollLeft, ys = [...old.querySelectorAll("ol")].map((o) => o.scrollTop);
+      old.replaceWith(tmp.firstElementChild);
+      $("#columns").scrollLeft = x; // keep the lane you are on (phones show one at a time)
+      $("#columns").querySelectorAll("ol").forEach((o, i) => { o.scrollTop = ys[i] || 0; });
       $("#total").textContent = document.querySelectorAll(".card").length;
       applyFilters();
       if (!quick.hidden) placeQuick();
@@ -449,7 +492,12 @@ kbd { font: 500 11px ui-monospace, monospace; border: 1px solid var(--line); bor
   form.addEventListener("change", (e) => { if (e.target.tagName === "SELECT") saveNow(); });
   form.addEventListener("focusout", (e) => { if (e.target.id === "title" || e.target.id === "p-body") saveNow(); });
   form.addEventListener("submit", (e) => { e.preventDefault(); saveNow(); });
-  form.addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); e.target.id === "p-note" ? $("#p-addnote").click() : saveNow(); } });
+  // Enter sends a note (Shift+Enter for a new line); Cmd/Ctrl+Enter saves the ticket. Not mid IME composition.
+  form.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" || e.isComposing) return;
+    if (e.target.id === "p-note" && !e.shiftKey) { e.preventDefault(); $("#p-addnote").click(); }
+    else if (e.metaKey || e.ctrlKey) { e.preventDefault(); saveNow(); }
+  });
 
   function show() { panel.classList.add("open"); panel.setAttribute("aria-hidden", "false"); }
   async function close() {
@@ -460,6 +508,10 @@ kbd { font: 500 11px ui-monospace, monospace; border: 1px solid var(--line); bor
     if (id) document.querySelector(`.card[data-id="${id}"]`)?.focus();
   }
   $("#p-close").onclick = close;
+  // Framed by the devnotes overlay: Escape with nothing open asks the app to close the board.
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && parent !== window && !panel.classList.contains("open") && !$("#lightbox").open && quick.hidden) parent.postMessage("claudeweaver-board:close", "*");
+  });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && panel.classList.contains("open") && !$("#lightbox").open) close(); });
 
   const setVal = (el, v) => { if (el.value !== v) el.value = v; }; // keeps the caret when nothing changed
@@ -527,7 +579,8 @@ kbd { font: 500 11px ui-monospace, monospace; border: 1px solid var(--line); bor
   };
 
   applyFilters();
-  const m = location.hash.match(/^#t=(\d+)$/); if (m) openTicket(m[1]);
+  const openHash = () => { const m = location.hash.match(/^#t=(\d+)$/); if (m) openTicket(m[1]); };
+  openHash(); addEventListener("hashchange", openHash); // the devnotes overlay opens tickets by hash
 })();
 </script>
 </body>
