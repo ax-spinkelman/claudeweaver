@@ -489,6 +489,7 @@ kbd { font: 500 11px ui-monospace, monospace; border: 1px solid var(--line); bor
     if (t.selector) row("Element", text(t.selector, true));
     if (t.element_text) row("Text", text(t.element_text));
     if (t.viewport) row("Viewport", text(t.viewport));
+    if (t.device) row("Device", text([t.device, t.screen, t.app, t.ua].filter(Boolean).join(" · ")));
     row("Source", text(t.source || "unknown"));
     for (const [k, v] of Object.entries(t.extra || {})) row(k, text(v));
   }

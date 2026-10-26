@@ -139,6 +139,29 @@ func TestAddNoteCreatesSection(t *testing.T) {
 	}
 }
 
+func TestCreateDeviceFields(t *testing.T) {
+	s := fixedStore(t)
+	tk, err := s.Create(NewTicket{Title: "x", Source: "devnote", Viewport: "402x812",
+		Device: "phone\nstatus: done", Screen: " 402x874@3 ", App: "tauri-ios", UA: strings.Repeat("a", 100)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := readFile(t, s, tk.File)
+	for _, want := range []string{"\nviewport: 402x812\n", "\ndevice: \"phone status: do\"\n", "\nscreen: 402x874@3\n",
+		"\napp: tauri-ios\n", "\nua: " + strings.Repeat("a", 64) + "\n"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("missing %q in:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "\nstatus: done") {
+		t.Fatal("newline in device injected a field")
+	}
+	back, _ := s.Get(tk.ID)
+	if back.Device != "phone status: do" || back.Screen != "402x874@3" || back.App != "tauri-ios" || len(back.UA) != 64 {
+		t.Fatalf("round trip: %+v", back)
+	}
+}
+
 func TestCreateFormatAndQuoting(t *testing.T) {
 	s := fixedStore(t)
 	tk, err := s.Create(NewTicket{Title: "feat: Selector #2 breaks", Type: "feature", Area: "web", Source: "devnote",

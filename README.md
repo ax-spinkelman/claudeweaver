@@ -57,7 +57,7 @@ On the board, N opens quick add, J and K move between cards, and keys 1 to 6 mov
 
 The overlay is one script, `devnotes.js`. It runs in a shadow root, so it does not change the styles of your page.
 
-- Shift-click any element, type the note and press Enter. The ticket stores the URL, a CSS selector, the element text and the viewport.
+- Shift-click any element, type the note and press Enter. The ticket stores the URL, a CSS selector, the element text, the viewport and the device: `device` (phone, tablet or desktop), `screen` (for example `402x874@3`), `app` (`tauri-ios`, `tauri-desktop` or `browser`) and `ua` (for example `Safari iOS`).
 - On a phone or tablet, open the small tab on the right edge, choose "Drop a note" and tap the element.
 - Pins mark the open tickets on the page. Each pin shows the status with a color and an icon. The icon of a `doing` ticket turns. If you set "reduce motion" in your system, the icon does not turn.
 - Click a pin to read the ticket, change its status or add a note.

@@ -12,6 +12,20 @@
   };
 
   // ---- pure helpers ----
+  // Where a note came from. The phone/tablet/desktop rule lives only here:
+  // a fine pointer is desktop; a touch screen under 600px on its short side is a phone.
+  function deviceInfo() {
+    const ua = navigator.userAgent, short = Math.min(screen.width, screen.height);
+    const ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+    const os = ios ? "iOS" : (ua.match(/Android|Windows|Mac|CrOS|Linux/) || ["?"])[0];
+    const browser = (ua.match(/Firefox|Edg|OPR|Chrome|Safari/) || ["?"])[0];
+    return {
+      device: !matchMedia("(pointer: coarse)").matches ? "desktop" : short < 600 ? "phone" : "tablet",
+      screen: `${screen.width}x${screen.height}@${+devicePixelRatio.toFixed(2)}`,
+      app: "__TAURI_INTERNALS__" in window ? (ios ? "tauri-ios" : "tauri-desktop") : "browser",
+      ua: `${browser} ${os}`,
+    };
+  }
   function selectorFor(el) {
     const unique = (s) => { try { return document.querySelectorAll(s).length === 1; } catch { return false; } };
     const attr = (n, v) => `[${n}="${String(v).replace(/["\\]/g, "\\$&")}"]`;
@@ -292,7 +306,7 @@ kbd { font: 600 11px/1 ui-monospace, monospace; border: 1px solid var(--line); b
     const n = parseNote(text, feature), el = target, rect = el.getBoundingClientRect(), files = queued;
     const ticket = {
       title: n.title || "Screenshot", body: n.body, type: n.type, status: "inbox", priority: "p2", area: AREA, source: "devnote",
-      url: location.href, selector: selectorFor(el), element_text: elementText(el), viewport: innerWidth + "x" + innerHeight,
+      url: location.href, selector: selectorFor(el), element_text: elementText(el), viewport: innerWidth + "x" + innerHeight, ...deviceInfo(),
     };
     $("note").hidden = true;
     // Start the capture now, while the keypress still counts as a user

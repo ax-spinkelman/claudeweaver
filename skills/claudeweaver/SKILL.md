@@ -74,7 +74,7 @@ Server template (Go `html/template` is shown, other engines are the same):
 
 The page must come from `http://localhost`, `http://127.0.0.1` or `http://*.localhost`. With `-tailnet-host`, the page can also come from `https://<tailnet-host>`. The API refuses other origins.
 
-To drop a note, the human Shift-clicks an element, types and presses Enter. On a phone or tablet, the human opens the small tab on the right edge, chooses "Drop a note" and taps the element. The ticket goes to `inbox` with the URL, a CSS selector, the element text, the viewport and an optional screenshot. Pins mark the open notes on the page. Each pin shows the status color and icon. The icon of a `doing` ticket turns. Shift+D hides the whole overlay.
+To drop a note, the human Shift-clicks an element, types and presses Enter. On a phone or tablet, the human opens the small tab on the right edge, chooses "Drop a note" and taps the element. The ticket goes to `inbox` with the URL, a CSS selector, the element text, the viewport, the device (`device`, `screen`, `app`, `ua`) and an optional screenshot. Check the device before you fix a layout bug: a `phone` note is about the mobile layout. Pins mark the open notes on the page. Each pin shows the status color and icon. The icon of a `doing` ticket turns. Shift+D hides the whole overlay.
 
 ### Phones over Tailscale
 
@@ -121,7 +121,11 @@ source: devnote    # devnote | human | agent
 url: http://localhost:5173/settings
 selector: "main > form button.save"
 element_text: "Save"
-viewport: 1440x900
+viewport: 1440x900 # window.innerWidth x innerHeight in CSS pixels
+device: phone      # phone | tablet | desktop
+screen: 402x874@3  # screen width x height in CSS pixels @ devicePixelRatio
+app: browser       # tauri-ios | tauri-desktop | browser
+ua: Safari iOS     # short browser and OS, not the full user agent
 screenshot: tickets/assets/1007.png   # optional
 ---
 

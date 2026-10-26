@@ -44,6 +44,10 @@ type Ticket struct {
 	Selector    string            `json:"selector,omitempty"`
 	ElementText string            `json:"element_text,omitempty"`
 	Viewport    string            `json:"viewport,omitempty"`
+	Device      string            `json:"device,omitempty"`
+	Screen      string            `json:"screen,omitempty"`
+	App         string            `json:"app,omitempty"`
+	UA          string            `json:"ua,omitempty"`
 	Screenshot  string            `json:"screenshot,omitempty"`
 	Images      []string          `json:"images,omitempty"` // "assets/<name>" paths: the screenshot field plus image links in the body
 	Extra       map[string]string `json:"extra,omitempty"`  // unknown frontmatter fields, read-only
@@ -54,7 +58,7 @@ type Ticket struct {
 
 var knownKeys = map[string]bool{"id": true, "title": true, "type": true, "status": true, "priority": true,
 	"area": true, "created": true, "updated": true, "source": true, "url": true, "selector": true,
-	"element_text": true, "viewport": true, "screenshot": true}
+	"element_text": true, "viewport": true, "device": true, "screen": true, "app": true, "ua": true, "screenshot": true}
 
 // ---- file format ----
 
@@ -245,7 +249,8 @@ func toTicket(name string, d *doc) Ticket {
 	f := d.fields()
 	t := Ticket{File: name, Title: f["title"], Type: f["type"], Status: f["status"], Priority: f["priority"],
 		Area: f["area"], Created: f["created"], Updated: f["updated"], Source: f["source"], URL: f["url"],
-		Selector: f["selector"], ElementText: f["element_text"], Viewport: f["viewport"], Screenshot: f["screenshot"]}
+		Selector: f["selector"], ElementText: f["element_text"], Viewport: f["viewport"], Device: f["device"], Screen: f["screen"], App: f["app"], UA: f["ua"],
+		Screenshot: f["screenshot"]}
 	t.ID, _ = strconv.Atoi(f["id"])
 	if t.ID <= 0 {
 		t.ID = idFromName(name)
@@ -464,6 +469,10 @@ type NewTicket struct {
 	Selector    string `json:"selector"`
 	ElementText string `json:"element_text"`
 	Viewport    string `json:"viewport"`
+	Device      string `json:"device"`
+	Screen      string `json:"screen"`
+	App         string `json:"app"`
+	UA          string `json:"ua"`
 }
 
 func oneOf(field, v string, allowed []string) error {
@@ -516,7 +525,9 @@ func (s *Store) Create(n NewTicket) (Ticket, error) {
 	for _, kv := range [][2]string{{"id", strconv.Itoa(id)}, {"title", n.Title}, {"type", n.Type},
 		{"status", n.Status}, {"priority", n.Priority}, {"area", n.Area}, {"created", now}, {"updated", now},
 		{"source", n.Source}, {"url", n.URL}, {"selector", n.Selector},
-		{"element_text", oneLine(n.ElementText, 120)}, {"viewport", n.Viewport}} {
+		{"element_text", oneLine(n.ElementText, 120)}, {"viewport", oneLine(n.Viewport, 32)},
+		{"device", oneLine(n.Device, 16)}, {"screen", oneLine(n.Screen, 32)}, {"app", oneLine(n.App, 16)},
+		{"ua", oneLine(n.UA, 64)}} {
 		d.set(kv[0], kv[1])
 	}
 	body := strings.Trim(n.Body, "\n")
