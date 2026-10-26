@@ -476,6 +476,15 @@ func columns(ts []Ticket) []column {
 	for _, t := range ts {
 		cols[idx[t.Status]].Tickets = append(cols[idx[t.Status]].Tickets, t)
 	}
+	for _, c := range cols {
+		// Newest first: updated (List defaults it to created) as RFC3339 UTC sorts as text; id breaks ties.
+		slices.SortFunc(c.Tickets, func(a, b Ticket) int {
+			if a.Updated != b.Updated {
+				return strings.Compare(b.Updated, a.Updated)
+			}
+			return b.ID - a.ID
+		})
+	}
 	return cols
 }
 

@@ -630,3 +630,19 @@ func TestNotesEndpoint(t *testing.T) {
 		t.Fatalf("phone page: %d %s", w.Code, w.Body)
 	}
 }
+
+func TestColumnsNewestFirst(t *testing.T) {
+	cols := columns([]Ticket{
+		{ID: 1, Status: "todo", Updated: "2026-10-20T00:00:00Z"},
+		{ID: 2, Status: "todo", Updated: "2026-10-22T00:00:00Z"},
+		{ID: 3, Status: "todo", Updated: "2026-10-20T00:00:00Z"},
+		{ID: 4, Status: "inbox", Updated: "2026-10-01T00:00:00Z"},
+	})
+	var got []int
+	for _, tk := range cols[1].Tickets {
+		got = append(got, tk.ID)
+	}
+	if fmt.Sprint(got) != "[2 3 1]" || cols[0].Tickets[0].ID != 4 {
+		t.Fatalf("todo order %v, inbox %v", got, cols[0].Tickets)
+	}
+}
