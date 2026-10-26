@@ -148,6 +148,7 @@ body.selecting .card[aria-selected=true]::after { content: ""; position: absolut
 [hidden] { display: none !important; }
 #bulk-n { font-weight: 700; margin-right: auto; }
 body.selecting #columns { padding-bottom: 96px; }
+@media (pointer: coarse) { .card { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-user-drag: none; } }
 @keyframes rise { from { opacity: 0; transform: translateY(12px); } }
 @media (prefers-reduced-motion: reduce) { #bulk { animation: none; } }
 @media (max-width: 520px) { #bulk-n { flex-basis: 100%; } #bulk .field { flex: 1; min-width: 0; } }
@@ -447,9 +448,20 @@ body.selecting #columns { padding-bottom: 96px; }
       else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); done(false); }
     };
   }
+  // A long press on a card (touch) starts Select mode with that card checked.
+  let press, pressed;
+  document.addEventListener("pointerdown", (e) => {
+    pressed = false;
+    const c = e.pointerType === "touch" && !selecting && e.target.closest?.(".card"); if (!c) return;
+    press = { x: e.clientX, y: e.clientY, t: setTimeout(() => { press = null; pressed = true; setSelecting(true); toggleSel(c.dataset.id); navigator.vibrate?.(10); }, 500) };
+  });
+  const unpress = (e) => { if (press && (e.type !== "pointermove" || Math.hypot(e.clientX - press.x, e.clientY - press.y) > 10)) { clearTimeout(press.t); press = null; } };
+  for (const t of ["pointermove", "pointerup", "pointercancel"]) document.addEventListener(t, unpress);
+  document.addEventListener("contextmenu", (e) => { if (pressed || press) e.preventDefault(); });
   let clickTimer;
   document.addEventListener("click", (e) => {
     const c = e.target.closest?.(".card"); if (!c || e.target.isContentEditable) return;
+    if (pressed) { pressed = false; return; } // the click that ends a long press
     if (selecting) { toggleSel(c.dataset.id); return; }
     clearTimeout(clickTimer);
     if (e.target.closest("h3")) clickTimer = setTimeout(() => openTicket(c.dataset.id), 250); // wait to see if it is a double-click
