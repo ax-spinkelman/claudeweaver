@@ -187,6 +187,32 @@ func newServer(st *Store, unsafeAny bool, events io.Writer) http.Handler {
 		}
 		reply(w, t, err)
 	})
+	mux.HandleFunc("GET /api/prompts", func(w http.ResponseWriter, r *http.Request) {
+		ps, err := st.Prompts()
+		reply(w, ps, err)
+	})
+	savePrompt := func(w http.ResponseWriter, r *http.Request, id string) {
+		var in PromptInput
+		if !decode(w, r, &in) {
+			return
+		}
+		p, err := st.SavePrompt(id, in)
+		if err == nil && id == "" {
+			w.WriteHeader(http.StatusCreated)
+		}
+		reply(w, p, err)
+	}
+	mux.HandleFunc("POST /api/prompts", func(w http.ResponseWriter, r *http.Request) { savePrompt(w, r, "") })
+	mux.HandleFunc("PUT /api/prompts/{id}", func(w http.ResponseWriter, r *http.Request) { savePrompt(w, r, r.PathValue("id")) })
+	// Running a prompt files a ticket, so it prints the same line as POST /api/tickets and wakes the agent.
+	mux.HandleFunc("POST /api/prompts/{id}/run", func(w http.ResponseWriter, r *http.Request) {
+		t, err := st.RunPrompt(r.PathValue("id"))
+		if err == nil {
+			s.event("created #%d %s %s %s %q", t.ID, t.Type, t.Area, t.Priority, t.Title)
+			w.WriteHeader(http.StatusCreated)
+		}
+		reply(w, t, err)
+	})
 	mux.HandleFunc("PATCH /api/tickets/{id}", s.withID(func(w http.ResponseWriter, r *http.Request, id int) {
 		var p Patch
 		if !decode(w, r, &p) {

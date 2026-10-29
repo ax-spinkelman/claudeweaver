@@ -783,3 +783,52 @@ func TestReferencedPRs(t *testing.T) {
 		t.Fatalf("after set: refs %q prs %q", got.Refs, got.PRs)
 	}
 }
+
+func TestPrompts(t *testing.T) {
+	s := fixedStore(t)
+	home, _ := os.UserHomeDir()
+	p, err := s.SavePrompt("", PromptInput{Name: "Observability checks", Type: "observability", Repo: home + "/Development/ax-vuln-sync", Text: "Check the alerts.\n\n```\nfoo\n```\n"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.ID != "observability-checks" || p.Repo != "~/Development/ax-vuln-sync" || p.LastRun != "" || p.Text != "Check the alerts.\n\n```\nfoo\n```" {
+		t.Fatalf("saved %+v", p)
+	}
+	if p2, err := s.SavePrompt("", PromptInput{Name: "Observability checks", Text: "x"}); err != nil || p2.ID != "observability-checks-2" {
+		t.Fatalf("same name: %+v %v", p2, err)
+	}
+	for _, bad := range []struct {
+		id string
+		in PromptInput
+	}{{"", PromptInput{Text: "no name"}}, {"", PromptInput{Name: "X", Type: "bogus"}}, {"../x", PromptInput{Name: "X"}}, {"nope", PromptInput{Name: "X"}}} {
+		if _, err := s.SavePrompt(bad.id, bad.in); err == nil {
+			t.Errorf("accepted %q %+v", bad.id, bad.in)
+		}
+	}
+	if p, err = s.SavePrompt(p.ID, PromptInput{Name: "Obs", Type: "observability", Repo: p.Repo, Text: "New text"}); err != nil || p.ID != "observability-checks" || p.Name != "Obs" {
+		t.Fatalf("edit: %+v %v", p, err)
+	}
+
+	var out bytes.Buffer
+	h := newServer(s, false, &out)
+	if r := do(h, "POST", "/api/prompts/"+p.ID+"/run", "", ""); r.Code != http.StatusCreated {
+		t.Fatalf("run: %d %s", r.Code, r.Body)
+	}
+	if !strings.HasPrefix(out.String(), `EVENT created #1000 observability web p2 "Obs"`) {
+		t.Fatalf("event: %q", out.String())
+	}
+	tk, _ := s.Get(1000)
+	if tk.Status != "todo" || tk.Type != "observability" || tk.Repo != "~/Development/ax-vuln-sync" || tk.Body != "New text" || tk.Source != "human" {
+		t.Fatalf("ticket %+v", tk)
+	}
+	ps, err := s.Prompts()
+	if err != nil || len(ps) != 2 || ps[0].ID != "observability-checks" || ps[0].LastRun != "2026-10-17T09:30:00Z" {
+		t.Fatalf("prompts %+v %v", ps, err)
+	}
+	if r := do(h, "POST", "/api/prompts/nope/run", "", ""); r.Code != http.StatusNotFound {
+		t.Fatalf("missing prompt: %d", r.Code)
+	}
+	if ts, _ := s.List(); len(ts) != 1 {
+		t.Fatalf("prompt files listed as tickets: %d", len(ts))
+	}
+}

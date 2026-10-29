@@ -644,10 +644,7 @@ func (s *Store) Update(id int, p Patch) (Ticket, error) {
 		}
 	}
 	if p.Repo != nil {
-		r := oneLine(*p.Repo, 300)
-		if h, err := os.UserHomeDir(); err == nil && strings.HasPrefix(r, h+"/") {
-			r = "~" + r[len(h):] // the shell expands an unquoted ~; keep the file the same on every machine
-		}
+		r := cleanRepo(*p.Repo)
 		p.Repo = &r
 	}
 	prs, err := prLine(p.PRs)
@@ -805,4 +802,165 @@ func (s *Store) modify(id int, fn func(*doc) error) (Ticket, error) {
 		return Ticket{}, err
 	}
 	return toTicket(name, d), nil
+}
+
+// cleanRepo keeps a repo on one line, and writes a path under the home directory
+// as ~/..., because the shell expands an unquoted ~ and the file must read the same on every machine.
+func cleanRepo(r string) string {
+	r = oneLine(r, 300)
+	if h, err := os.UserHomeDir(); err == nil && strings.HasPrefix(r, h+"/") {
+		r = "~" + r[len(h):]
+	}
+	return r
+}
+
+// ---- recurring prompts ----
+//
+// A recurring prompt is <dir>/prompts/<id>.md: frontmatter name, type, repo and
+// last_run, and the prompt text as the body. Running one files it as a todo ticket.
+
+type Prompt struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Type    string `json:"type,omitempty"`
+	Repo    string `json:"repo,omitempty"`
+	LastRun string `json:"last_run,omitempty"`
+	Text    string `json:"text"`
+}
+
+type PromptInput struct{ Name, Type, Repo, Text string }
+
+var promptID = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
+
+func (s *Store) promptPath(id string) (string, error) {
+	if !promptID.MatchString(id) {
+		return "", fmt.Errorf("bad prompt id %q", id)
+	}
+	return filepath.Join(s.Dir, "prompts", id+".md"), nil
+}
+
+func toPrompt(id string, d *doc) Prompt {
+	f := d.fields()
+	p := Prompt{ID: id, Name: f["name"], Type: f["type"], Repo: f["repo"], LastRun: f["last_run"], Text: strings.Trim(d.body, "\n")}
+	def(&p.Name, id)
+	return p
+}
+
+func (s *Store) readPrompt(id string) (string, *doc, error) {
+	path, err := s.promptPath(id)
+	if err != nil {
+		return "", nil, err
+	}
+	b, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return "", nil, fmt.Errorf("prompt %q: %w", id, ErrNotFound)
+	}
+	return path, parseDoc(string(b)), err
+}
+
+// Prompts lists the recurring prompts by name. A missing prompts folder is an empty list.
+func (s *Store) Prompts() ([]Prompt, error) {
+	ents, err := os.ReadDir(filepath.Join(s.Dir, "prompts"))
+	if errors.Is(err, os.ErrNotExist) {
+		return []Prompt{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	out := []Prompt{}
+	for _, e := range ents {
+		id, ok := strings.CutSuffix(e.Name(), ".md")
+		if e.IsDir() || !ok || !promptID.MatchString(id) {
+			continue
+		}
+		if _, d, err := s.readPrompt(id); err == nil {
+			out = append(out, toPrompt(id, d))
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name) })
+	return out, nil
+}
+
+// SavePrompt creates a prompt when id is empty, or rewrites the fields and text of
+// prompt id. It keeps last_run and any other field it does not know.
+func (s *Store) SavePrompt(id string, in PromptInput) (Prompt, error) {
+	name := oneLine(in.Name, 120)
+	if name == "" {
+		return Prompt{}, errors.New("prompt name is required")
+	}
+	if in.Type != "" {
+		if err := oneOf("type", in.Type, Types); err != nil {
+			return Prompt{}, err
+		}
+	}
+	unlock, err := s.lock()
+	if err != nil {
+		return Prompt{}, err
+	}
+	defer unlock()
+	d := &doc{}
+	if id == "" {
+		base := slugify(name)
+		for n := 1; ; n++ {
+			id = base
+			if n > 1 {
+				id = fmt.Sprintf("%s-%d", base, n)
+			}
+			if path, _ := s.promptPath(id); !fileExists(path) {
+				break
+			}
+		}
+	} else if _, d, err = s.readPrompt(id); err != nil {
+		return Prompt{}, err
+	}
+	for _, kv := range [][2]string{{"name", name}, {"type", in.Type}, {"repo", cleanRepo(in.Repo)}} {
+		d.set(kv[0], kv[1])
+	}
+	if text := strings.Trim(in.Text, "\n"); text != "" {
+		d.body = "\n" + text + "\n"
+	} else {
+		d.body = "\n"
+	}
+	path, _ := s.promptPath(id)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return Prompt{}, err
+	}
+	if err := writeAtomic(path, []byte(d.String())); err != nil {
+		return Prompt{}, err
+	}
+	return toPrompt(id, d), nil
+}
+
+// RunPrompt files prompt id as a todo ticket and stamps the prompt's last_run.
+func (s *Store) RunPrompt(id string) (Ticket, error) {
+	_, d, err := s.readPrompt(id)
+	if err != nil {
+		return Ticket{}, err
+	}
+	p := toPrompt(id, d)
+	t, err := s.Create(NewTicket{Title: p.Name, Type: p.Type, Status: "todo", Source: "human", Body: p.Text})
+	if err != nil {
+		return Ticket{}, err
+	}
+	if p.Repo != "" {
+		if t, err = s.Update(t.ID, Patch{Repo: &p.Repo}); err != nil {
+			return Ticket{}, err
+		}
+	}
+	unlock, err := s.lock()
+	if err != nil {
+		return t, err
+	}
+	defer unlock()
+	path, d, err := s.readPrompt(id) // reread: an edit may have landed while the ticket was written
+	if err != nil {
+		return t, err
+	}
+	d.set("last_run", s.stamp())
+	return t, writeAtomic(path, []byte(d.String()))
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
