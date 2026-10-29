@@ -103,6 +103,10 @@ To use it, take a screenshot, tap the thumbnail, tap the share button and choose
 
 Each image must be 5 MB or less, and one request takes 10 images at most. If a photo is too large, add the action "Convert Image" (format JPEG) before "Get Contents of URL".
 
+## Recurring prompts
+
+The human keeps prompts that they run every few days in the toolbox at the bottom of the board. Each prompt is `tickets/prompts/<id>.md`, with the frontmatter `name`, `type`, `repo` and `last_run`, and the prompt text as the body. Run in the toolbox files the prompt as a `todo` ticket, with the prompt's name as the title, its text as the description, and its type and repo. The board prints the usual `EVENT created` line, so work that ticket like any other. Do not edit a prompt file unless the human asks.
+
 ## Ticket format
 
 The file name is `tickets/<id>-<slug>.md`, for example `tickets/1007-save-button-overlaps-footer.md`. Ids from the tool start at 1000. Lower ids are free for tickets made by hand.

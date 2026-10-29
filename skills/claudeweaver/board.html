@@ -91,6 +91,28 @@ body:not(.closed) .col[data-status=wontfix] { display: none; }
 .spin { align-self: center; flex: none; color: var(--raspberry); animation: spin 1.2s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { #panel, #panel:not(.open), .col ol { transition: none; } .spin { animation: none; } }
+/* Wide screens: the panel is docked and always shown. With no ticket open it shows a hint. */
+#p-empty { margin: auto; padding: 24px; text-align: center; }
+#panel.open #p-empty, #panel:not(.open) > :not(#p-empty) { display: none; }
+@media (min-width: 1000px) {
+  body { padding-right: min(600px, 100vw); }
+  #panel, #panel:not(.open) { transform: none; visibility: visible; box-shadow: none; transition: none; }
+  #p-close { display: none; }
+}
+/* Toolbox along the bottom of the board. */
+#toolbox { flex: none; border-top: 1px solid var(--line); background: var(--paper); padding: 10px 20px 12px; max-height: 32vh; overflow-y: auto; }
+#toolbox .tool-head { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+#toolbox .tool-head .label { margin-right: auto; }
+#rp-list { list-style: none; margin: 0; padding: 0; }
+#rp-list li { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px solid var(--line); }
+#rp-list li:first-child { border-top: 0; }
+.rp-name { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rp-when { color: var(--graphite); font-size: 13px; white-space: nowrap; }
+#rp-dialog { border: 1px solid var(--line); border-radius: 12px; padding: 18px; width: min(560px, calc(100vw - 32px)); background: var(--paper); color: var(--text); }
+#rp-dialog::backdrop { background: rgba(15,16,25,.45); }
+#rp-form { display: flex; flex-direction: column; gap: 12px; }
+#rp-form .row { display: grid; grid-template-columns: 180px 1fr; gap: 10px; }
+#rp-form .field { width: 100%; }
 #panel .top { display: flex; align-items: center; gap: 10px; padding: 14px 20px; border-bottom: 1px solid var(--line); }
 #panel .top .id { color: var(--graphite); font-weight: 600; }
 #panel .top .file { color: var(--graphite); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
@@ -228,6 +250,21 @@ body.selecting #columns { padding-bottom: 96px; }
 </form>
 <nav id="lanes" aria-label="Lanes"></nav>
 {{template "columns" .}}
+<section id="toolbox" aria-label="Toolbox">
+  <div class="tool-head"><span class="label">Recurring prompts</span><span class="msg" id="rp-msg" role="status"></span><button type="button" class="btn" id="rp-new">New prompt</button></div>
+  <ul id="rp-list"></ul>
+</section>
+<dialog id="rp-dialog" aria-label="Recurring prompt">
+  <form id="rp-form" autocomplete="off">
+    <label class="label">Name<input class="field" id="rp-name" required maxlength="120" placeholder="Observability checks"></label>
+    <div class="row">
+      <label class="label">Type<select class="field" id="rp-type"><option value="">Default (bug)</option>{{range .Types}}<option>{{.}}</option>{{end}}</select></label>
+      <label class="label">Repo<input class="field" id="rp-repo" placeholder="~/Development/app or https://github.com/org/app"></label>
+    </div>
+    <label class="label">Prompt<textarea class="field" id="rp-text" placeholder="What the agent does each time you run this. Markdown works."></textarea></label>
+    <div class="actions"><span class="msg err" id="rp-err" role="alert"></span><button type="button" class="btn" id="rp-cancel">Cancel</button><button class="btn primary">Save</button></div>
+  </form>
+</dialog>
 <div class="hint"><kbd>N</kbd> new &nbsp; <kbd>J</kbd> <kbd>K</kbd> move between cards &nbsp; <kbd>Enter</kbd> open &nbsp; <kbd>1</kbd>&ndash;<kbd>6</kbd> move to column &nbsp; <kbd>E</kbd> edit title (or double-click it) &nbsp; Drag cards between columns. Paste or drop a screenshot into quick add or the panel.</div>
 <div id="bulk" role="toolbar" aria-label="Selected tickets" hidden>
   <span id="bulk-n">0 selected</span>
@@ -238,6 +275,7 @@ body.selecting #columns { padding-bottom: 96px; }
 <dialog id="lightbox"><img alt="Screenshot"></dialog>
 
 <aside id="panel" aria-label="Ticket" aria-hidden="true">
+  <div id="p-empty" class="empty">Pick a ticket to see it here.</div>
   <div class="top">
     <span class="id" id="p-id"></span><span class="file mono" id="p-file"></span>
     <span class="msg" id="p-msg" role="status"></span>
@@ -524,7 +562,7 @@ body.selecting #columns { padding-bottom: 96px; }
     if (current) openTicket(c.dataset.id, true);
   }
   document.addEventListener("keydown", (e) => {
-    if (e.metaKey || e.ctrlKey || typing(e.target) || $("#lightbox").open) return;
+    if (e.metaKey || e.ctrlKey || typing(e.target) || $("#lightbox").open || $("#rp-dialog").open) return;
     const card = e.target.closest?.(".card"), k = e.key.toLowerCase();
     if (card && e.key === "Enter") { e.preventDefault(); openTicket(card.dataset.id); return; }
     if (card && e.altKey && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
@@ -590,6 +628,7 @@ body.selecting #columns { padding-bottom: 96px; }
   // ---- detail panel: saves on its own ----
   let current = null, loaded = null, dirty = false, timer, saving = Promise.resolve();
   const panel = $("#panel"), form = $("#p-form");
+  const docked = matchMedia("(min-width: 1000px)"); // the CSS docks the panel at the same width
   const fields = ["status", "type", "priority", "area"];
   function setTab(preview) {
     $("#t-write").setAttribute("aria-selected", !preview); $("#t-preview").setAttribute("aria-selected", preview);
@@ -738,7 +777,7 @@ body.selecting #columns { padding-bottom: 96px; }
   $("#p-done").onclick = () => { $("#p-status").value = "done"; touched.add("status"); close(); }; // close saves the change
   // A click outside the panel closes it. Cards switch tickets instead; the lightbox handles its own clicks.
   document.addEventListener("click", (e) => {
-    if (!panel.classList.contains("open")) return;
+    if (!panel.classList.contains("open") || docked.matches || $("#rp-dialog").open) return; // docked, the panel stays
     const path = e.composedPath();
     if (path.includes(panel) || path.includes($("#lightbox")) || path.some((n) => n.classList?.contains("card"))) return;
     close();
@@ -749,7 +788,8 @@ body.selecting #columns { padding-bottom: 96px; }
   });
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape" || !panel.classList.contains("open") || $("#lightbox").open) return;
-    if (searching) { endSearch(); newest(); } else close();
+    if ($("#rp-dialog").open) return; // Esc closes the dialog only
+    if (searching) { endSearch(); newest(); } else if (!docked.matches) close();
   });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && selecting) setSelecting(false); });
 
@@ -830,8 +870,52 @@ body.selecting #columns { padding-bottom: 96px; }
     catch (err) { msg(err.message, true); }
   };
 
+  // ---- toolbox: recurring prompts. Run files the prompt as a todo ticket for the agent. ----
+  let prompts = [], editing = null;
+  const rtf = new Intl.RelativeTimeFormat([], { numeric: "auto" });
+  const ago = (iso) => {
+    const s = (Date.now() - Date.parse(iso)) / 1000;
+    for (const [unit, n] of [["day", 86400], ["hour", 3600], ["minute", 60]]) if (s >= n) return rtf.format(-Math.floor(s / n), unit);
+    return "just now";
+  };
+  const btn = (label, fn, cls = "") => { const b = document.createElement("button"); b.type = "button"; b.className = "btn " + cls; b.textContent = label; b.onclick = fn; return b; };
+  function renderPrompts() {
+    const ul = $("#rp-list"); ul.innerHTML = "";
+    if (!prompts.length) { ul.innerHTML = '<li class="empty">No recurring prompts yet.</li>'; return; }
+    for (const p of prompts) {
+      const li = document.createElement("li"), name = document.createElement("span"), when = document.createElement("span");
+      name.className = "rp-name"; name.textContent = p.name; name.title = p.text;
+      when.className = "rp-when"; when.textContent = p.last_run ? "ran " + ago(p.last_run) : "never run";
+      if (p.last_run) when.title = new Date(p.last_run).toLocaleString();
+      li.append(name, when, btn("Edit", () => editPrompt(p)), btn("Run", (e) => runPrompt(p, e.target), "primary"));
+      ul.append(li);
+    }
+  }
+  async function loadPrompts() {
+    try { prompts = await api("GET", "/api/prompts"); renderPrompts(); } catch (err) { $("#rp-msg").textContent = err.message; }
+  }
+  async function runPrompt(p, b) {
+    b.disabled = true;
+    try { const t = await api("POST", `/api/prompts/${p.id}/run`); $("#rp-msg").textContent = `Filed #${t.id}`; await loadPrompts(); refresh(); }
+    catch (err) { $("#rp-msg").textContent = err.message; b.disabled = false; }
+  }
+  function editPrompt(p) {
+    editing = p?.id || null;
+    $("#rp-name").value = p?.name || ""; $("#rp-type").value = p?.type || ""; $("#rp-repo").value = p?.repo || ""; $("#rp-text").value = p?.text || "";
+    $("#rp-err").textContent = ""; $("#rp-dialog").showModal(); $("#rp-name").focus();
+  }
+  $("#rp-new").onclick = () => editPrompt(null);
+  $("#rp-cancel").onclick = () => $("#rp-dialog").close();
+  $("#rp-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const body = { name: $("#rp-name").value, type: $("#rp-type").value, repo: $("#rp-repo").value, text: $("#rp-text").value };
+    try { await api(editing ? "PUT" : "POST", editing ? `/api/prompts/${editing}` : "/api/prompts", body); $("#rp-dialog").close(); loadPrompts(); }
+    catch (err) { $("#rp-err").textContent = err.message; }
+  });
+  loadPrompts(); setInterval(renderPrompts, 60_000); // keeps "ran N ago" current
+
   applyFilters();
-  const openHash = () => { const m = location.hash.match(/^#t=(\d+)$/); if (m) openTicket(m[1]); };
+  const openHash =() => { const m = location.hash.match(/^#t=(\d+)$/); if (m) openTicket(m[1]); };
   openHash(); addEventListener("hashchange", openHash); // the devnotes overlay opens tickets by hash
 })();
 </script>
