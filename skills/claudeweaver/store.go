@@ -49,11 +49,12 @@ type Ticket struct {
 	App         string            `json:"app,omitempty"`
 	UA          string            `json:"ua,omitempty"`
 	Screenshot  string            `json:"screenshot,omitempty"`
-	Images      []string          `json:"images,omitempty"` // "assets/<name>" paths: the screenshot field plus image links in the body
-	Extra       map[string]string `json:"extra,omitempty"`  // unknown frontmatter fields, read-only
-	Body        string            `json:"body"`             // markdown before "## Notes"
-	Notes       string            `json:"notes"`            // markdown after "## Notes"
-	File        string            `json:"file"`             // file name inside the tickets dir
+	Images      []string          `json:"images,omitempty"`   // "assets/<name>" paths: the screenshot field plus image links in the body
+	Extra       map[string]string `json:"extra,omitempty"`    // unknown frontmatter fields, read-only
+	Body        string            `json:"body"`               // markdown before "## Notes"
+	Notes       string            `json:"notes"`              // markdown after "## Notes"
+	Messages    []Message         `json:"messages,omitempty"` // Notes split into one entry per dated note
+	File        string            `json:"file"`               // file name inside the tickets dir
 }
 
 var knownKeys = map[string]bool{"id": true, "title": true, "type": true, "status": true, "priority": true,
@@ -238,6 +239,34 @@ func notesText(section string) string {
 	return strings.Trim(after, "\n")
 }
 
+// Message is one note as AddNote writes it: "- <at> (<by>): text", with
+// the following lines indented two spaces. Text above the first note has no At.
+type Message struct {
+	At   string `json:"at,omitempty"`
+	By   string `json:"by,omitempty"`
+	Text string `json:"text"`
+}
+
+var noteLine = regexp.MustCompile(`^- (\d{4}-\d\d-\d\d \d\d:\d\dZ)(?: \(([^)]*)\))?: ?(.*)$`)
+
+func messages(notes string) []Message {
+	var out []Message
+	for _, l := range strings.Split(notes, "\n") {
+		if m := noteLine.FindStringSubmatch(l); m != nil {
+			out = append(out, Message{At: m[1], By: m[2], Text: m[3]})
+			continue
+		}
+		if len(out) == 0 {
+			out = append(out, Message{})
+		}
+		out[len(out)-1].Text += "\n" + strings.TrimPrefix(l, "  ")
+	}
+	for i := range out {
+		out[i].Text = strings.Trim(out[i].Text, "\n")
+	}
+	return out
+}
+
 // def sets *p to v when it is empty.
 func def(p *string, v string) {
 	if *p == "" {
@@ -273,6 +302,9 @@ func toTicket(name string, d *doc) Ticket {
 	desc, notes := splitBody(d.body)
 	t.Body = strings.Trim(desc, "\n")
 	t.Notes = notesText(notes)
+	if t.Notes != "" {
+		t.Messages = messages(t.Notes)
+	}
 	t.Images = images(t)
 	return t
 }

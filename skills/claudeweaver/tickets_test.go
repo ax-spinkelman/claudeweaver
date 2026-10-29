@@ -674,3 +674,23 @@ func TestHumanNoteReopens(t *testing.T) {
 		}
 	}
 }
+
+func TestNoteMessages(t *testing.T) {
+	s := fixedStore(t)
+	writeFile(t, s, "0401-x.md", "---\nid: 401\ntitle: X\n---\n\nHello.\n\n## Notes\n\nWritten by hand.\n")
+	if _, err := s.AddNote(401, "Logged in.\n\n```\n❯ ottoctl login\n  indented\n```", "human"); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.AddNote(401, "Checked it.", "claude")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []Message{
+		{Text: "Written by hand."},
+		{At: "2026-10-17 09:30Z", By: "human", Text: "Logged in.\n\n```\n❯ ottoctl login\n  indented\n```"},
+		{At: "2026-10-17 09:30Z", By: "claude", Text: "Checked it."},
+	}
+	if fmt.Sprintf("%q", got.Messages) != fmt.Sprintf("%q", want) {
+		t.Fatalf("messages:\n%q\nwant:\n%q", got.Messages, want)
+	}
+}
