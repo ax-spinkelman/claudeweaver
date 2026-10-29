@@ -8,6 +8,7 @@
 :root {
   --ink: #1A1C2B; --frost: #EEF1F6; --paper: #FFFFFF; --raspberry: #3550F0; --cherry: #E8344E;
   --graphite: #5D6274; --blocked: #B91C1C; --line: #E1E5EE; --hover: #E4E8F0; --selected: #DCE2FD;
+  --add: #1A7F37; --del: #CF222E; --find: #FFF6D6;
   --page: var(--frost); --text: var(--ink); --on-accent: #fff; --shadow: 0 1px 2px rgba(26,28,43,.06);
   color-scheme: light;
 }
@@ -15,12 +16,14 @@
   :root:not([data-theme="light"]) {
     --ink: #0F1019; --frost: #171925; --paper: #1D1F2D; --raspberry: #6F82FF; --cherry: #FF5A70;
     --graphite: #9499AD; --blocked: #FF7A7A; --line: #2A2D3E; --hover: #24273A; --selected: #262D55;
+    --add: #3FB950; --del: #FF7B72; --find: #2E2914;
     --text: #E7E9F2; --shadow: none; --on-accent: #0F1019; color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --ink: #0F1019; --frost: #171925; --paper: #1D1F2D; --raspberry: #6F82FF; --cherry: #FF5A70;
   --graphite: #9499AD; --blocked: #FF7A7A; --line: #2A2D3E; --hover: #24273A; --selected: #262D55;
+    --add: #3FB950; --del: #FF7B72; --find: #2E2914;
   --text: #E7E9F2; --shadow: none; --on-accent: #0F1019; color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -100,7 +103,9 @@ body:not(.closed) .col[data-status=wontfix] { display: none; }
 textarea.field { height: auto; min-height: 160px; padding: 10px; resize: vertical; line-height: 1.5; width: 100%; }
 .md { font-size: 15px; overflow-wrap: anywhere; }
 .md > :first-child { margin-top: 0; } .md > :last-child { margin-bottom: 0; }
-.md pre { background: var(--frost); padding: 10px; border-radius: 8px; overflow-x: auto; }
+.md pre { background: var(--frost); border: 1px solid var(--line); padding: 8px 10px; border-radius: 8px; overflow-x: auto; font-size: 12.5px; line-height: 1.45; }
+.md pre code { font-size: inherit; }
+.md .add { color: var(--add); } .md .del { color: var(--del); }
 .md h1, .md h2, .md h3 { font-size: 15px; margin: 14px 0 6px; }
 .preview { border: 1px solid var(--line); border-radius: 8px; padding: 10px; min-height: 160px; }
 .context { background: var(--frost); border-radius: 10px; padding: 12px 14px; display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 14px; }
@@ -108,6 +113,29 @@ textarea.field { height: auto; min-height: 160px; padding: 10px; resize: vertica
 .context dd { margin: 0; overflow-wrap: anywhere; }
 .context img { max-width: 100%; border-radius: 6px; border: 1px solid var(--line); }
 .notes ul { padding-left: 18px; margin: 0; }
+.notes-head { flex-direction: row; align-items: center; justify-content: space-between; }
+.notes-head button { border: 0; background: none; color: var(--graphite); cursor: pointer; padding: 4px; border-radius: 6px; display: grid; }
+.notes-head button:hover { color: var(--text); background: var(--hover); }
+.convo .turn { display: grid; grid-template-columns: 14px 1fr; gap: 8px; padding: 8px 10px; margin: 6px 0; border-radius: 8px; }
+.convo .human { background: var(--frost); }
+.convo .human pre { background: var(--paper); }
+.convo .mark { font: 700 12px/18px ui-monospace, monospace; color: #D97757; }
+.convo .agent .mark { font-size: 10px; }
+.convo .human .mark { color: var(--raspberry); }
+.convo .body { min-width: 0; }
+.convo .meta { font-size: 12px; line-height: 18px; color: var(--graphite); margin-bottom: 2px; }
+.convo .meta b { color: var(--text); font-weight: 600; }
+#p-notes-wrap.searching { background: var(--find); margin: 0 -10px; padding: 8px 10px; border-radius: 10px; }
+/* Sticky, so the box stays in view and typing never scrolls the panel away from the current match.
+   top cancels the 16px top padding of #panel .scroll, so no text shows above the bar. */
+.nsearch { display: flex; gap: 6px; align-items: center; position: sticky; top: -16px; z-index: 1; background: var(--find); padding: 8px 0; }
+.nsearch .field { flex: 1; min-width: 0; }
+.nsearch .btn { padding: 0 10px; }
+.nsearch .count { font-size: 12px; color: var(--graphite); white-space: nowrap; }
+.convo.filtering .turn:not(.hit) { opacity: .45; }
+.convo .turn.cur { box-shadow: inset 0 0 0 2px #E8962A; }
+::highlight(note-hit) { background-color: rgba(255, 196, 0, .45); }
+::highlight(note-cur) { background-color: rgba(255, 140, 0, .8); }
 .actions { display: flex; gap: 8px; justify-content: flex-end; align-items: center; }
 .msg { color: var(--graphite); font-size: 13px; }
 .msg.err { color: var(--cherry); }
@@ -233,9 +261,16 @@ body.selecting #columns { padding-bottom: 96px; }
     </div>
     <dl class="context" id="p-context" hidden></dl>
     <div class="notes" id="p-notes-wrap">
-      <div class="label">Notes</div>
-      <div class="md" id="p-notes"></div>
-      <textarea class="field" id="p-note" aria-label="Add a note" placeholder="Add a note" style="min-height:70px;margin-top:8px"></textarea>
+      <div class="label notes-head">Notes<button type="button" id="n-find" aria-label="Search notes" title="Search notes (⌘F)"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button></div>
+      <div class="nsearch" id="n-bar" hidden>
+        <input class="field" id="n-q" placeholder="Search notes" aria-label="Search notes" autocomplete="off">
+        <span class="count" id="n-count" role="status"></span>
+        <button type="button" class="btn" id="n-prev" aria-label="Previous match" title="Previous match (↑)">↑</button>
+        <button type="button" class="btn" id="n-next" aria-label="Next match" title="Next match (↓)">↓</button>
+        <button type="button" class="btn" id="n-exit" aria-label="Close search">Esc</button>
+      </div>
+      <div class="md convo" id="p-notes"></div>
+      <textarea class="field" id="p-note" aria-label="Add a note" placeholder="Add a note. Markdown and ``` code blocks work. ⌘Enter sends." style="min-height:70px;margin-top:8px"></textarea>
       <div class="actions"><button type="button" class="btn" id="p-addnote">Add note</button></div>
     </div>
   </form>
@@ -507,15 +542,19 @@ body.selecting #columns { padding-bottom: 96px; }
     .replace(/!\[([^\]]*)\]\((assets\/[\w.-]+)\)/g, '<img alt="$1" src="/$2">')
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
     .replace(/(^|[^*])\*([^*\s][^*]*)\*/g, "$1<em>$2</em>")
-    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
-  function md(src) {
-    const out = []; let list = null, para = [], code = null;
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
+    .replace(/(^|[\s(])(https?:\/\/[^\s<]+[^\s<.,;:!?)'"])/g, '$1<a href="$2" target="_blank" rel="noopener">$2</a>'); // bare URLs, as on GitHub
+  const pre = (src, lang) => "<pre><code>" + (lang !== "diff" ? esc(src) : src.split("\n")
+    .map((l) => /^[+-]/.test(l) ? `<span class="${l[0] === "+" ? "add" : "del"}">${esc(l)}</span>` : esc(l)).join("\n")) + "</code></pre>";
+  function md(src, breaks) {
+    const out = []; let list = null, para = [], code = null, lang = "";
     // Hard-wrapped source lines flow as one paragraph; two trailing spaces force a break.
-    const flow = (ls) => ls.map((l, i) => inline(l.trim()) + (i === ls.length - 1 ? "" : / {2}$/.test(l) ? "<br>" : " ")).join("");
+    // With breaks (notes, as in GitHub comments) every line break stays.
+    const flow = (ls) => ls.map((l, i) => inline(l.trim()) + (i === ls.length - 1 ? "" : breaks || / {2}$/.test(l) ? "<br>" : " ")).join("");
     const flush = () => { if (para.length) out.push("<p>" + flow(para) + "</p>"); para = []; if (list) { out.push(`</${list}>`); list = null; } };
     for (const line of src.split("\n")) {
-      if (code !== null) { if (line.startsWith("```")) { out.push("<pre><code>" + esc(code) + "</code></pre>"); code = null; } else code += (code ? "\n" : "") + line; continue; }
-      if (line.startsWith("```")) { flush(); code = ""; continue; }
+      if (code !== null) { if (line.startsWith("```")) { out.push(pre(code, lang)); code = null; } else code += (code ? "\n" : "") + line; continue; }
+      if (line.startsWith("```")) { flush(); code = ""; lang = line.slice(3).trim(); continue; }
       let m;
       if ((m = line.match(/^(#{1,6})\s+(.*)/))) { flush(); out.push(`<h3>${inline(m[2])}</h3>`); continue; }
       if ((m = line.match(/^\s*([-*]|\d+\.)\s+(.*)/))) {
@@ -529,7 +568,7 @@ body.selecting #columns { padding-bottom: 96px; }
       if (list) { out.push(`</${list}>`); list = null; }
       para.push(line);
     }
-    if (code !== null) out.push("<pre><code>" + esc(code) + "</code></pre>");
+    if (code !== null) out.push(pre(code, lang));
     flush();
     return out.join("");
   }
@@ -571,21 +610,103 @@ body.selecting #columns { padding-bottom: 96px; }
     }));
   }
   form.addEventListener("input", (e) => {
-    if (e.target.id === "p-note") return;
+    if (e.target.id === "p-note" || e.target.id === "n-q") return;
     dirty = true; clearTimeout(timer); timer = setTimeout(saveNow, 700);
   });
   form.addEventListener("change", (e) => { if (e.target.tagName === "SELECT") saveNow(); });
   form.addEventListener("focusout", (e) => { if (e.target.id === "title" || e.target.id === "p-body") saveNow(); });
   form.addEventListener("submit", (e) => { e.preventDefault(); saveNow(); });
-  // Enter sends a note (Shift+Enter for a new line); Cmd/Ctrl+Enter saves the ticket. Not mid IME composition.
+  // Cmd/Ctrl+Enter sends a note from the note box and saves the ticket anywhere else. Not mid IME composition.
   form.addEventListener("keydown", (e) => {
-    if (e.key !== "Enter" || e.isComposing) return;
-    if (e.target.id === "p-note" && !e.shiftKey) { e.preventDefault(); $("#p-addnote").click(); }
-    else if (e.metaKey || e.ctrlKey) { e.preventDefault(); saveNow(); }
+    if (e.key !== "Enter" || e.isComposing || !(e.metaKey || e.ctrlKey)) return;
+    e.preventDefault();
+    if (e.target.id === "p-note") $("#p-addnote").click(); else saveNow();
+  });
+
+  // ---- notes as a conversation, with search ----
+  const turn = (m) => {
+    const human = m.by === "human"; // humanAuthors in store.go
+    const d = new Date((m.at || "").replace(" ", "T"));
+    const when = isNaN(d) ? "" : d.toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+    return `<div class="turn ${human ? "human" : "agent"}"><span class="mark" aria-hidden="true">${human ? "❯" : "●"}</span><div class="body">` +
+      `<div class="meta"><b>${human ? "You" : esc(m.by || "agent")}</b>${when ? ` · <time title="${esc(m.at)}">${when}</time>` : ""}</div>${md(m.text, true)}</div></div>`;
+  };
+  function renderNotes(t) {
+    const box = $("#p-notes");
+    if (box.dataset.notes === t.notes) return; // a refresh with no new note keeps the search position
+    box.dataset.notes = t.notes;
+    box.innerHTML = t.messages?.length ? t.messages.map(turn).join("") : '<div class="empty">No notes yet.</div>';
+    if (searching) runSearch(true);
+  }
+  const newest = () => $("#p-notes").lastElementChild?.scrollIntoView({ block: "nearest" });
+
+  let searching = false, hits = [], at = -1;
+  // Ranges for each case-insensitive match of q in el, also across formatting such as bold or code.
+  function find(el, q) {
+    const nodes = [], starts = []; let text = "";
+    const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    for (let n; (n = w.nextNode()); text += n.data) { nodes.push(n); starts.push(text.length); }
+    const pos = (i) => { let k = starts.length - 1; while (starts[k] > i) k--; return [nodes[k], i - starts[k]]; };
+    const out = [], s = text.toLowerCase();
+    for (let i = s.indexOf(q); q && i >= 0; i = s.indexOf(q, i + q.length)) {
+      const r = document.createRange(); r.setStart(...pos(i)); r.setEnd(...pos(i + q.length)); out.push(r);
+    }
+    return out;
+  }
+  function runSearch(keep) {
+    const q = $("#n-q").value.trim().toLowerCase(), box = $("#p-notes"), prev = at;
+    hits = []; at = -1;
+    for (const t of box.querySelectorAll(".turn")) {
+      const rs = q ? find(t.querySelector(".body"), q) : [];
+      t.classList.toggle("hit", rs.length > 0); t.classList.remove("cur");
+      for (const r of rs) hits.push({ r, t });
+    }
+    box.classList.toggle("filtering", hits.length > 0);
+    CSS.highlights?.set("note-hit", new Highlight(...hits.map((h) => h.r)));
+    CSS.highlights?.delete("note-cur");
+    $("#n-count").textContent = q && !hits.length ? "No matches" : "";
+    if (hits.length) go(keep && prev >= 0 ? Math.min(prev, hits.length - 1) : hits.length - 1); // newest first
+  }
+  // Puts match i in the middle of the panel, and in view inside a wide code block.
+  function go(i) {
+    if (!hits.length) return;
+    at = (i + hits.length) % hits.length;
+    const h = hits[at];
+    $("#p-notes .turn.cur")?.classList.remove("cur"); h.t.classList.add("cur");
+    CSS.highlights?.set("note-cur", new Highlight(h.r));
+    $("#n-count").textContent = `${at + 1} of ${hits.length}`;
+    const code = h.r.startContainer.parentElement.closest("pre");
+    if (code) code.scrollLeft += h.r.getBoundingClientRect().left - code.getBoundingClientRect().left - code.clientWidth / 2;
+    const r = h.r.getBoundingClientRect(), f = form.getBoundingClientRect();
+    form.scrollTop += r.top - f.top - form.clientHeight / 2;
+  }
+  function startSearch() {
+    searching = true; $("#p-notes-wrap").classList.add("searching"); $("#n-bar").hidden = false;
+    $("#n-q").focus(); $("#n-q").select(); runSearch();
+  }
+  function endSearch() {
+    searching = false; hits = []; at = -1;
+    $("#p-notes-wrap").classList.remove("searching"); $("#n-bar").hidden = true;
+    $("#p-notes").classList.remove("filtering");
+    $("#p-notes").querySelectorAll(".hit, .cur").forEach((t) => t.classList.remove("hit", "cur"));
+    CSS.highlights?.delete("note-hit"); CSS.highlights?.delete("note-cur");
+  }
+  $("#n-find").onclick = startSearch;
+  $("#n-exit").onclick = () => { endSearch(); newest(); };
+  $("#n-prev").onclick = () => go(at - 1);
+  $("#n-next").onclick = () => go(at + 1);
+  $("#n-q").addEventListener("input", () => runSearch());
+  $("#n-q").addEventListener("keydown", (e) => {
+    const step = e.isComposing ? 0 : { Enter: e.shiftKey ? -1 : 1, ArrowDown: 1, ArrowUp: -1 }[e.key];
+    if (step) { e.preventDefault(); e.stopPropagation(); go(at + step); }
+  });
+  document.addEventListener("keydown", (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === "f" && panel.classList.contains("open")) { e.preventDefault(); startSearch(); }
   });
 
   function show() { panel.classList.add("open"); panel.setAttribute("aria-hidden", "false"); }
   async function close() {
+    if (searching) endSearch();
     await saveNow();
     panel.classList.remove("open"); panel.setAttribute("aria-hidden", "true");
     const id = current; current = null; loaded = null; dirty = false;
@@ -605,7 +726,10 @@ body.selecting #columns { padding-bottom: 96px; }
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && parent !== window && !panel.classList.contains("open") && !$("#lightbox").open && quick.hidden && !selecting) parent.postMessage("claudeweaver-board:close", "*");
   });
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && panel.classList.contains("open") && !$("#lightbox").open) close(); });
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape" || !panel.classList.contains("open") || $("#lightbox").open) return;
+    if (searching) { endSearch(); newest(); } else close();
+  });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && selecting) setSelecting(false); });
 
   const setVal = (el, v) => { if (el.value !== v) el.value = v; }; // keeps the caret when nothing changed
@@ -617,7 +741,7 @@ body.selecting #columns { padding-bottom: 96px; }
     setVal($("#title"), t.title);
     for (const f of fields) setVal($("#p-" + f), t[f]);
     setVal($("#p-body"), t.body);
-    $("#p-notes").innerHTML = t.notes ? md(t.notes) : '<div class="empty">No notes yet.</div>';
+    renderNotes(t);
     const th = $("#p-thumbs"), imgs = t.images || [];
     if (th.dataset.list !== imgs.join(" ")) {
       th.dataset.list = imgs.join(" "); th.innerHTML = "";
@@ -646,6 +770,7 @@ body.selecting #columns { padding-bottom: 96px; }
     try {
       const t = await api("GET", `/api/tickets/${id}`);
       if (quiet && dirty && current === String(t.id)) return;
+      if (searching && current !== String(t.id)) endSearch(); // j/k switch tickets quietly
       current = String(t.id); dirty = false; fill(t); if (!quiet) { setTab(false); msg(""); }
       history.replaceState(null, "", "#t=" + t.id); show(); // focus stays put so 1-6, j/k and e keep working
     } catch (e) { if (!quiet) alert("Could not open #" + id + ": " + e.message); }
@@ -669,7 +794,7 @@ body.selecting #columns { padding-bottom: 96px; }
   });
   $("#p-addnote").onclick = async () => {
     const text = $("#p-note").value.trim(); if (!text || !current) return;
-    try { const t = await api("POST", `/api/tickets/${current}/notes`, { text, by: "human" }); $("#p-note").value = ""; $("#p-notes").innerHTML = md(t.notes); if (!dirty) fill(t); refresh(); } // a reply can reopen it
+    try { const t = await api("POST", `/api/tickets/${current}/notes`, { text, by: "human" }); $("#p-note").value = ""; renderNotes(t); newest(); if (!dirty) fill(t); refresh(); } // a reply can reopen it
     catch (err) { msg(err.message, true); }
   };
 

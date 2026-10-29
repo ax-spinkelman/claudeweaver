@@ -29,7 +29,7 @@ The flags are:
 - `-areas`: a comma list of areas. The default is `web,server,docs,infra`. The first area is the default for new tickets.
 - `-tailnet-host`: the Tailscale name of this machine, for example `box.example.ts.net`. Use it with `tailscale serve`, so that a phone on your tailnet can drop notes.
 
-Open `http://localhost:<port>`. On the board, N opens quick add (`feat: Title p1 #web`, then Enter). J and K move between cards. Enter opens a card. Keys 1 to 6 move it to a column. E edits the title. The panel saves as you type. You can paste or drop images into it.
+Open `http://localhost:<port>`. On the board, N opens quick add (`feat: Title p1 #web`, then Enter). J and K move between cards. Enter opens a card. Keys 1 to 6 move it to a column. E edits the title. The panel saves as you type. You can paste or drop images into it. The notes show as a conversation: notes by `human` in a shaded `❯` box, notes by agents with a `●` mark. Cmd+Enter sends a note. Cmd+F searches the notes.
 
 ## The CLI
 
@@ -185,7 +185,7 @@ Images go in `tickets/assets/<id>.png`, then `<id>-2.png` and so on. The body li
 - Use "must" for a requirement. Do not use "should" or "might".
 - Do not use em-dashes, semicolons or emoji.
 - Do not use filler words such as "simply", "robust" or "seamlessly". State facts and numbers.
-- Write code, commands, file paths and error text exactly, in backticks.
+- Write code, commands, file paths and error text exactly, in backticks. Put command output and code of more than one line in a ``` block. A ```diff block colors the added and removed lines.
 - Define a term the first time you use it, in a few words.
 
 ## Watch loop for agents
