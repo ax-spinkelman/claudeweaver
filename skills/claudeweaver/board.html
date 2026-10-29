@@ -792,6 +792,7 @@ body.selecting #columns { padding-bottom: 96px; }
     if (t.device) row("Device", text([t.device, t.screen, t.app, t.ua].filter(Boolean).join(" · ")));
     row("Source", text(t.source || "unknown"));
     for (const [k, v] of Object.entries(t.extra || {})) row(k, text(v));
+    ctx.hidden = ctx.children.length <= 2; // Source alone is not worth the space
   }
   $("#lightbox").onclick = () => $("#lightbox").close();
   async function openTicket(id, quiet) {
