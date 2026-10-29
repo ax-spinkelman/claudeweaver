@@ -248,6 +248,7 @@ body.selecting #columns { padding-bottom: 96px; }
       <label>Priority<select class="field" id="p-priority">{{range .Priorities}}<option>{{.}}</option>{{end}}</select></label>
       <label>Area<select class="field" id="p-area">{{range .Areas}}<option>{{.}}</option>{{end}}</select></label>
     </div>
+    <dl class="context" id="p-work" hidden></dl>
     <div>
       <div class="tabs" role="tablist"><span class="label">Description</span>
         <button type="button" role="tab" id="t-write" aria-selected="true">Write</button>
@@ -593,12 +594,13 @@ body.selecting #columns { padding-bottom: 96px; }
   $("#t-write").onclick = () => setTab(false);
   $("#t-preview").onclick = () => setTab(true);
   function msg(text, err) { $("#p-msg").textContent = text; $("#p-msg").classList.toggle("err", !!err); }
+  // Only fields the human edited since the last load or save go out. The others can be stale
+  // while the panel skips refreshes during typing, and must not undo what an agent changed.
+  const touched = new Set(), el = (k) => $(k === "title" ? "#title" : "#p-" + k);
   function changes() {
     const out = {};
     if (!loaded) return out;
-    const now = { title: $("#title").value, body: $("#p-body").value };
-    for (const f of fields) now[f] = $("#p-" + f).value;
-    for (const k in now) if (now[k] !== loaded[k]) out[k] = now[k];
+    for (const k of touched) if (el(k).value !== loaded[k]) out[k] = el(k).value;
     return out;
   }
   function saveNow() {
@@ -611,17 +613,22 @@ body.selecting #columns { padding-bottom: 96px; }
       try {
         const t = await api("PATCH", `/api/tickets/${id}`, p);
         if (current !== id) return;
-        loaded = t; dirty = Object.keys(changes()).length > 0; msg("Saved.");
+        loaded = t;
+        for (const k in p) if (el(k).value === p[k]) touched.delete(k); // still edited if typed into during the save
+        for (const k of [...fields, "title", "body"]) if (!touched.has(k)) setVal(el(k), t[k]);
+        dirty = Object.keys(changes()).length > 0; msg("Saved.");
         $("#p-file").textContent = t.file;
         refresh();
       } catch (err) { msg(err.message, true); }
     }));
   }
   form.addEventListener("input", (e) => {
-    if (e.target.id === "p-note" || e.target.id === "n-q") return;
+    const k = e.target.id.replace(/^p-/, "");
+    if (![...fields, "title", "body"].includes(k)) return; // the note box and the notes search are not ticket fields
+    touched.add(k);
     dirty = true; clearTimeout(timer); timer = setTimeout(saveNow, 700);
   });
-  form.addEventListener("change", (e) => { if (e.target.tagName === "SELECT") saveNow(); });
+  form.addEventListener("change", (e) => { if (e.target.tagName === "SELECT") saveNow(); }); // the input event already marked it touched
   form.addEventListener("focusout", (e) => { if (e.target.id === "title" || e.target.id === "p-body") saveNow(); });
   form.addEventListener("submit", (e) => { e.preventDefault(); saveNow(); });
   // Cmd/Ctrl+Enter sends a note from the note box and saves the ticket anywhere else. Not mid IME composition.
@@ -723,7 +730,7 @@ body.selecting #columns { padding-bottom: 96px; }
     if (id) document.querySelector(`.card[data-id="${id}"]`)?.focus();
   }
   $("#p-close").onclick = close;
-  $("#p-done").onclick = () => { $("#p-status").value = "done"; close(); }; // close saves the change
+  $("#p-done").onclick = () => { $("#p-status").value = "done"; touched.add("status"); close(); }; // close saves the change
   // A click outside the panel closes it. Cards switch tickets instead; the lightbox handles its own clicks.
   document.addEventListener("click", (e) => {
     if (!panel.classList.contains("open")) return;
@@ -743,7 +750,7 @@ body.selecting #columns { padding-bottom: 96px; }
 
   const setVal = (el, v) => { if (el.value !== v) el.value = v; }; // keeps the caret when nothing changed
   function fill(t) {
-    loaded = t;
+    loaded = t; touched.clear();
     $("#p-done").hidden = t.status === "done";
     $("#p-id").textContent = "#" + t.id;
     $("#p-file").textContent = t.file;
@@ -763,8 +770,16 @@ body.selecting #columns { padding-bottom: 96px; }
       th.insertAdjacentHTML("beforeend", `<span class="msg">${imgs.length ? "" : "None yet. "}Paste or drop an image here to add one.</span>`);
     }
     const ctx = $("#p-context"); ctx.innerHTML = "";
-    const row = (k, node) => { const dt = document.createElement("dt"); dt.textContent = k; const dd = document.createElement("dd"); dd.append(node); ctx.append(dt, dd); };
+    const row = (k, node, dl = ctx) => { const dt = document.createElement("dt"); dt.textContent = k; const dd = document.createElement("dd"); dd.append(...[node].flat()); dl.append(dt, dd); };
     const text = (s, cls) => { const e = document.createElement(cls ? "code" : "span"); e.textContent = s; return e; };
+    // Repo and PRs. Files can be edited by hand, so only http(s) values become links.
+    const link = (href, label) => { if (!/^https?:\/\//.test(href)) return text(href, true); const a = document.createElement("a"); a.href = href; a.target = "_blank"; a.rel = "noopener"; a.textContent = label; return a; };
+    const work = $("#p-work"); work.innerHTML = ""; work.hidden = !t.repo && !t.prs?.length;
+    if (t.repo) row("Repo", link(t.repo, t.repo.replace(/^https?:\/\/github\.com\//, "")), work);
+    if (t.prs?.length) row("PRs", t.prs.flatMap((u, i) => {
+      const m = u.match(/github\.com\/[^/]+\/([^/]+)\/pull\/(\d+)/);
+      return [...(i ? [" · "] : []), link(u, m ? `${m[1]}#${m[2]}` : u)];
+    }), work);
     if (t.url && /^https?:/.test(t.url)) { const a = document.createElement("a"); a.href = t.url; a.target = "_blank"; a.rel = "noopener"; a.textContent = t.url; row("Page", a); }
     if (t.selector) row("Element", text(t.selector, true));
     if (t.element_text) row("Text", text(t.element_text));

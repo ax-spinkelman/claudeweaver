@@ -41,6 +41,7 @@ The same binary is a CLI. All commands take `--dir` and `--areas`.
 ./.claudeweaver new --title "..." --type bug --area web --status todo --body - < notes.md
 ./.claudeweaver mv 1003 doing
 ./.claudeweaver note 1003 "Picked this up." --by claude
+./.claudeweaver set 1003 --repo ~/Development/myapp --pr https://github.com/org/myapp/pull/12
 ```
 
 You can also edit the ticket files directly. A write through the tool changes only the lines it touches. It keeps unknown fields, comments and the body.
@@ -127,6 +128,8 @@ screen: 402x874@3  # screen width x height in CSS pixels @ devicePixelRatio
 app: browser       # tauri-ios | tauri-desktop | browser
 ua: Safari iOS     # short browser and OS, not the full user agent
 screenshot: tickets/assets/1007.png   # optional
+repo: ~/Development/myapp   # optional: where the work happens, a directory or a repo URL
+prs: https://github.com/org/myapp/pull/12 https://github.com/org/lib/pull/3   # optional, space-separated
 ---
 
 What the human wrote.
@@ -155,6 +158,7 @@ Images go in `tickets/assets/<id>.png`, then `<id>-2.png` and so on. The body li
 
 - When you start a ticket, set `status: doing` immediately. The human watches the board to see what is in progress. If you give the ticket to a subagent, set `doing` before you hand it over, or tell the subagent to set it first.
 - Add a note with your name when you start, for example `./.claudeweaver note 1007 "Started." --by claude`.
+- When the work happens outside the board's own repo, set `repo` when you start. Add each pull request that you open or reference to `prs` as you go, for example `./.claudeweaver set 1007 --repo ~/Development/myapp --pr https://github.com/org/myapp/pull/12`. `--pr` adds to the list and skips a PR that is already there. The ticket panel shows both.
 - Notes are append-only. Add a new note. Do not rewrite old notes.
 - Commit as you work, not at the end. Put the ticket id in the commit message, for example `settings: keep the save button above the footer (1007)`.
 - If you cannot continue without a decision or a review from the human, set `status: blocked`. Write the question in a `## Blocked` section or in a note. Give the options that you see and the one that you recommend. Then start other work. Do not wait.
