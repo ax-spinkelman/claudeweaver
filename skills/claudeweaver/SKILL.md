@@ -107,6 +107,8 @@ Each image must be 5 MB or less, and one request takes 10 images at most. If a p
 
 The human keeps prompts that they run every few days in the toolbox at the bottom of the board. Each prompt is `tickets/prompts/<id>.md`, with the frontmatter `name`, `type`, `repo` and `last_run`, and the prompt text as the body. Run in the toolbox files the prompt as a `todo` ticket with `source: prompt`, the prompt's name as the title, its text as the description, and its type and repo. The board prints the usual `EVENT created` line, so work that ticket like any other. Do not edit a prompt file unless the human asks.
 
+A polling prompt is the same file with `every: N` (minutes). The board runs it on its own timer and files no ticket for it. When one is due, the board prints `EVENT poll <id> "<name>" since=<time of the previous poll, or never>`. When that line wakes you, read `tickets/prompts/<id>.md` and do what its text says, looking back to `since`. File a ticket only for each new thing you find, with `--source prompt`, and skip anything a ticket already has, for example a PR already in `prs` or `refs`. When you find nothing new, file nothing and add no note.
+
 ## Ticket format
 
 The file name is `tickets/<id>-<slug>.md`, for example `tickets/1007-save-button-overlaps-footer.md`. Ids from the tool start at 1000. Lower ids are free for tickets made by hand.
@@ -208,6 +210,7 @@ EVENT created #1012 bug web p2 "Title"
 EVENT updated #1012 status=todo
 EVENT note #1012 "text"
 EVENT screenshot #1012 tickets/assets/1012-2.png
+EVENT poll review-requests "Review requests" since=2026-10-29T21:30:00Z
 ```
 
 CLI writes and file edits print nothing, so your own writes do not wake you.

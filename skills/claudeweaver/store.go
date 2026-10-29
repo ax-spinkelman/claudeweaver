@@ -842,10 +842,14 @@ type Prompt struct {
 	Type    string `json:"type,omitempty"`
 	Repo    string `json:"repo,omitempty"`
 	LastRun string `json:"last_run,omitempty"`
+	Every   int    `json:"every,omitempty"` // minutes between polls; 0 is a recurring prompt you run by hand
 	Text    string `json:"text"`
 }
 
-type PromptInput struct{ Name, Type, Repo, Text string }
+type PromptInput struct {
+	Name, Type, Repo, Text string
+	Every                  int
+}
 
 var promptID = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
 
@@ -859,6 +863,7 @@ func (s *Store) promptPath(id string) (string, error) {
 func toPrompt(id string, d *doc) Prompt {
 	f := d.fields()
 	p := Prompt{ID: id, Name: f["name"], Type: f["type"], Repo: f["repo"], LastRun: f["last_run"], Text: strings.Trim(d.body, "\n")}
+	p.Every, _ = strconv.Atoi(f["every"])
 	def(&p.Name, id)
 	return p
 }
@@ -905,6 +910,9 @@ func (s *Store) SavePrompt(id string, in PromptInput) (Prompt, error) {
 	if name == "" {
 		return Prompt{}, errors.New("prompt name is required")
 	}
+	if in.Every < 0 {
+		return Prompt{}, errors.New("poll interval must be 0 (run by hand) or more minutes")
+	}
 	if in.Type != "" {
 		if err := oneOf("type", in.Type, Types); err != nil {
 			return Prompt{}, err
@@ -930,7 +938,11 @@ func (s *Store) SavePrompt(id string, in PromptInput) (Prompt, error) {
 	} else if _, d, err = s.readPrompt(id); err != nil {
 		return Prompt{}, err
 	}
-	for _, kv := range [][2]string{{"name", name}, {"type", in.Type}, {"repo", cleanRepo(in.Repo)}} {
+	every := ""
+	if in.Every > 0 {
+		every = strconv.Itoa(in.Every)
+	}
+	for _, kv := range [][2]string{{"name", name}, {"type", in.Type}, {"repo", cleanRepo(in.Repo)}, {"every", every}} {
 		d.set(kv[0], kv[1])
 	}
 	if text := strings.Trim(in.Text, "\n"); text != "" {
@@ -964,20 +976,40 @@ func (s *Store) RunPrompt(id string) (Ticket, error) {
 			return Ticket{}, err
 		}
 	}
-	unlock, err := s.lock()
-	if err != nil {
-		return t, err
-	}
-	defer unlock()
-	path, d, err := s.readPrompt(id) // reread: an edit may have landed while the ticket was written
-	if err != nil {
-		return t, err
-	}
-	d.set("last_run", s.stamp())
-	return t, writeAtomic(path, []byte(d.String()))
+	_, _, err = s.stampPrompt(id) // rereads the file: an edit may have landed while the ticket was written
+	return t, err
 }
 
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
+}
+
+// stampPrompt sets last_run on prompt id to now, and returns the prompt and the last_run before it.
+func (s *Store) stampPrompt(id string) (p Prompt, prev string, err error) {
+	unlock, err := s.lock()
+	if err != nil {
+		return Prompt{}, "", err
+	}
+	defer unlock()
+	path, d, err := s.readPrompt(id)
+	if err != nil {
+		return Prompt{}, "", err
+	}
+	prev = d.fields()["last_run"]
+	d.set("last_run", s.stamp())
+	return toPrompt(id, d), prev, writeAtomic(path, []byte(d.String()))
+}
+
+// DuePolls lists the polling prompts whose interval has passed since their last poll.
+func (s *Store) DuePolls() ([]Prompt, error) {
+	ps, err := s.Prompts()
+	var due []Prompt
+	for _, p := range ps {
+		last, perr := time.Parse(time.RFC3339, p.LastRun)
+		if p.Every > 0 && (perr != nil || s.Now().Sub(last) >= time.Duration(p.Every)*time.Minute) {
+			due = append(due, p)
+		}
+	}
+	return due, err
 }

@@ -855,3 +855,49 @@ func TestMCPs(t *testing.T) {
 		t.Fatalf("after set: %q", got.MCPs)
 	}
 }
+
+func TestPollingPrompts(t *testing.T) {
+	s := fixedStore(t)
+	now := s.Now()
+	s.Now = func() time.Time { return now }
+	poll, err := s.SavePrompt("", PromptInput{Name: "Slack PRs", Every: 30, Text: "Find PR links."})
+	if err != nil || poll.Every != 30 {
+		t.Fatalf("save: %+v %v", poll, err)
+	}
+	if _, err := s.SavePrompt("", PromptInput{Name: "Bad", Every: -1}); err == nil {
+		t.Error("negative interval accepted")
+	}
+	if _, err := s.SavePrompt("", PromptInput{Name: "By hand", Text: "x"}); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	step := func(d time.Duration) string {
+		now = now.Add(d)
+		out.Reset()
+		if err := pollDue(s, &out); err != nil {
+			t.Fatal(err)
+		}
+		return out.String()
+	}
+	if got := step(0); got != "EVENT poll slack-prs \"Slack PRs\" since=never\n" {
+		t.Fatalf("first poll: %q", got)
+	}
+	if got := step(29 * time.Minute); got != "" {
+		t.Fatalf("polled again too soon: %q", got)
+	}
+	if got := step(time.Minute); got != "EVENT poll slack-prs \"Slack PRs\" since="+now.Add(-30*time.Minute).UTC().Format(time.RFC3339)+"\n" {
+		t.Fatalf("not polled after 30 min: %q", got)
+	}
+	if ts, _ := s.List(); len(ts) != 0 {
+		t.Fatalf("a poll filed %d tickets", len(ts))
+	}
+
+	out.Reset()
+	h := newServer(s, false, &out)
+	if r := do(h, "POST", "/api/prompts/slack-prs/poll", "", ""); r.Code != http.StatusOK || !strings.HasPrefix(out.String(), "EVENT poll slack-prs \"Slack PRs\" since=2026-") {
+		t.Fatalf("poll now: %d %q", r.Code, out.String())
+	}
+	if ps, _ := s.Prompts(); ps[1].ID != "slack-prs" || ps[1].LastRun != now.UTC().Format(time.RFC3339) {
+		t.Fatalf("last_run not stamped: %+v", ps)
+	}
+}

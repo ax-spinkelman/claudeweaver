@@ -111,9 +111,9 @@ body:not(.closed) .col[data-status=wontfix] { display: none; }
 #toolbox { flex: none; border-top: 1px solid var(--line); background: var(--paper); padding: 10px 20px 12px; max-height: 32vh; overflow-y: auto; }
 #toolbox .tool-head { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
 #toolbox .tool-head .label { margin-right: auto; }
-#rp-list { list-style: none; margin: 0; padding: 0; }
-#rp-list li { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px solid var(--line); }
-#rp-list li:first-child { border-top: 0; }
+#rp-list, #pp-list { list-style: none; margin: 0; padding: 0; }
+#rp-list li, #pp-list li { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px solid var(--line); }
+#rp-list li:first-child, #pp-list li:first-child { border-top: 0; }
 .rp-name { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rp-when { color: var(--graphite); font-size: 13px; white-space: nowrap; }
 #rp-dialog { border: 1px solid var(--line); border-radius: 12px; padding: 18px; width: min(560px, calc(100vw - 32px)); background: var(--paper); color: var(--text); }
@@ -266,6 +266,8 @@ body.selecting #columns { padding-bottom: 96px; }
 <section id="toolbox" aria-label="Toolbox">
   <div class="tool-head"><span class="label">Recurring prompts</span><span class="msg" id="rp-msg" role="status"></span><button type="button" class="btn" id="rp-new">New prompt</button></div>
   <ul id="rp-list"></ul>
+  <div class="tool-head" style="margin-top:10px"><span class="label">Polling prompts</span><button type="button" class="btn" id="pp-new">New polling prompt</button></div>
+  <ul id="pp-list"></ul>
 </section>
 <dialog id="rp-dialog" aria-label="Recurring prompt">
   <form id="rp-form" autocomplete="off">
@@ -274,6 +276,7 @@ body.selecting #columns { padding-bottom: 96px; }
       <label class="label">Type<select class="field" id="rp-type"><option value="">Default (bug)</option>{{range .Types}}<option>{{.}}</option>{{end}}</select></label>
       <label class="label">Repo<input class="field" id="rp-repo" placeholder="~/Development/app or https://github.com/org/app"></label>
     </div>
+    <label class="label" id="rp-every-row">Poll every (minutes)<input class="field" id="rp-every" type="number" min="1" step="1" required></label>
     <label class="label">Prompt<textarea class="field" id="rp-text" placeholder="What the agent does each time you run this. Markdown works."></textarea></label>
     <div class="actions"><span class="msg err" id="rp-err" role="alert"></span><button type="button" class="btn" id="rp-cancel">Cancel</button><button class="btn primary">Save</button></div>
   </form>
@@ -897,8 +900,9 @@ body.selecting #columns { padding-bottom: 96px; }
     catch (err) { msg(err.message, true); }
   };
 
-  // ---- toolbox: recurring prompts. Run files the prompt as a todo ticket for the agent. ----
-  let prompts = [], editing = null;
+  // ---- toolbox. A recurring prompt runs when you click Run and files a todo ticket. A polling
+  // prompt (every > 0) runs on the board's timer: it wakes the agent and files no ticket itself. ----
+  let prompts = [], editing = null, polling = false;
   const rtf = new Intl.RelativeTimeFormat([], { numeric: "auto" });
   const ago = (iso) => {
     const s = (Date.now() - Date.parse(iso)) / 1000;
@@ -907,39 +911,50 @@ body.selecting #columns { padding-bottom: 96px; }
   };
   const btn = (label, fn, cls = "") => { const b = document.createElement("button"); b.type = "button"; b.className = "btn " + cls; b.textContent = label; b.onclick = fn; return b; };
   function renderPrompts() {
-    const ul = $("#rp-list"); ul.innerHTML = "";
-    if (!prompts.length) { ul.innerHTML = '<li class="empty">No recurring prompts yet.</li>'; return; }
-    for (const p of prompts) {
-      const li = document.createElement("li"), name = document.createElement("span"), when = document.createElement("span");
-      name.className = "rp-name"; name.textContent = p.name; name.title = p.text;
-      when.className = "rp-when"; when.textContent = p.last_run ? "ran " + ago(p.last_run) : "never run";
-      if (p.last_run) when.title = new Date(p.last_run).toLocaleString();
-      li.append(name, when, btn("Edit", () => editPrompt(p)), btn("Run", (e) => runPrompt(p, e.target), "primary"));
-      ul.append(li);
+    for (const [ul, list, poll, none] of [[$("#rp-list"), prompts.filter((p) => !p.every), false, "No recurring prompts yet."],
+                                          [$("#pp-list"), prompts.filter((p) => p.every), true, "No polling prompts yet."]]) {
+      ul.innerHTML = "";
+      if (!list.length) { ul.innerHTML = `<li class="empty">${none}</li>`; continue; }
+      for (const p of list) {
+        const li = document.createElement("li"), name = document.createElement("span"), when = document.createElement("span");
+        name.className = "rp-name"; name.textContent = p.name; name.title = p.text;
+        when.className = "rp-when";
+        when.textContent = poll ? `every ${p.every} min · ` + (p.last_run ? "polled " + ago(p.last_run) : "not polled yet")
+          : p.last_run ? "ran " + ago(p.last_run) : "never run";
+        if (p.last_run) when.title = new Date(p.last_run).toLocaleString();
+        li.append(name, when, btn("Edit", () => editPrompt(p)),
+          poll ? btn("Poll now", (e) => runPrompt(p, e.target, "poll"), "primary") : btn("Run", (e) => runPrompt(p, e.target), "primary"));
+        ul.append(li);
+      }
     }
   }
   async function loadPrompts() {
     try { prompts = await api("GET", "/api/prompts"); renderPrompts(); } catch (err) { $("#rp-msg").textContent = err.message; }
   }
-  async function runPrompt(p, b) {
+  async function runPrompt(p, b, how = "run") {
     b.disabled = true;
-    try { const t = await api("POST", `/api/prompts/${p.id}/run`); $("#rp-msg").textContent = `Filed #${t.id}`; await loadPrompts(); refresh(); }
-    catch (err) { $("#rp-msg").textContent = err.message; b.disabled = false; }
+    try {
+      const r = await api("POST", `/api/prompts/${p.id}/${how}`);
+      $("#rp-msg").textContent = how === "poll" ? `Polled ${p.name}` : `Filed #${r.id}`;
+      await loadPrompts(); if (how === "run") refresh();
+    } catch (err) { $("#rp-msg").textContent = err.message; b.disabled = false; }
   }
-  function editPrompt(p) {
-    editing = p?.id || null;
+  function editPrompt(p, poll = !!p?.every) {
+    editing = p?.id || null; polling = poll;
     $("#rp-name").value = p?.name || ""; $("#rp-type").value = p?.type || ""; $("#rp-repo").value = p?.repo || ""; $("#rp-text").value = p?.text || "";
+    $("#rp-every-row").hidden = !poll; $("#rp-every").disabled = !poll; $("#rp-every").value = p?.every || 30;
     $("#rp-err").textContent = ""; $("#rp-dialog").showModal(); $("#rp-name").focus();
   }
-  $("#rp-new").onclick = () => editPrompt(null);
+  $("#rp-new").onclick = () => editPrompt(null, false);
+  $("#pp-new").onclick = () => editPrompt(null, true);
   $("#rp-cancel").onclick = () => $("#rp-dialog").close();
   $("#rp-form").addEventListener("submit", async (e) => {
     e.preventDefault();
-    const body = { name: $("#rp-name").value, type: $("#rp-type").value, repo: $("#rp-repo").value, text: $("#rp-text").value };
+    const body = { name: $("#rp-name").value, type: $("#rp-type").value, repo: $("#rp-repo").value, text: $("#rp-text").value, every: polling ? Number($("#rp-every").value) : 0 };
     try { await api(editing ? "PUT" : "POST", editing ? `/api/prompts/${editing}` : "/api/prompts", body); $("#rp-dialog").close(); loadPrompts(); }
     catch (err) { $("#rp-err").textContent = err.message; }
   });
-  loadPrompts(); setInterval(renderPrompts, 60_000); // keeps "ran N ago" current
+  loadPrompts(); setInterval(loadPrompts, 60_000); // picks up the board's polls and keeps "N ago" current
 
   applyFilters();
   const openHash =() => { const m = location.hash.match(/^#t=(\d+)$/); if (m) openTicket(m[1]); return !!m; };

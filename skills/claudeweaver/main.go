@@ -50,7 +50,15 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	h := newServer(NewStore(*dir), *unsafeAny, os.Stdout)
+	st := NewStore(*dir)
+	h := newServer(st, *unsafeAny, os.Stdout)
+	go func() { // polling prompts: wake the agent when one is due
+		for range time.Tick(time.Minute) {
+			if err := pollDue(st, os.Stdout); err != nil {
+				log.Printf("polling prompts: %v", err)
+			}
+		}
+	}()
 	errc := make(chan error, len(addrs))
 	for i, a := range addrs {
 		ln, err := net.Listen("tcp", a)
@@ -135,6 +143,20 @@ func (s *server) event(format string, args ...any) {
 	fmt.Fprintf(s.events, "EVENT "+format+"\n", args...)
 }
 
+// pollDue stamps each due polling prompt and prints "EVENT poll <id> <name>", which
+// wakes the agent. A poll files no ticket; the agent files tickets for what it finds.
+func pollDue(st *Store, events io.Writer) error {
+	due, err := st.DuePolls()
+	for _, p := range due {
+		p, prev, err := st.stampPrompt(p.ID)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(events, "EVENT %s\n", pollEvent(p, prev))
+	}
+	return err
+}
+
 // changes lists the fields that differ, for the "updated" event line.
 func changes(a, b Ticket) string {
 	var out []string
@@ -206,6 +228,13 @@ func newServer(st *Store, unsafeAny bool, events io.Writer) http.Handler {
 	mux.HandleFunc("POST /api/prompts", func(w http.ResponseWriter, r *http.Request) { savePrompt(w, r, "") })
 	mux.HandleFunc("PUT /api/prompts/{id}", func(w http.ResponseWriter, r *http.Request) { savePrompt(w, r, r.PathValue("id")) })
 	// Running a prompt files a ticket, so it prints the same line as POST /api/tickets and wakes the agent.
+	mux.HandleFunc("POST /api/prompts/{id}/poll", func(w http.ResponseWriter, r *http.Request) { // Poll now
+		p, prev, err := st.stampPrompt(r.PathValue("id"))
+		if err == nil {
+			s.event("%s", pollEvent(p, prev))
+		}
+		reply(w, p, err)
+	})
 	mux.HandleFunc("POST /api/prompts/{id}/run", func(w http.ResponseWriter, r *http.Request) {
 		t, err := st.RunPrompt(r.PathValue("id"))
 		if err == nil {
@@ -711,4 +740,13 @@ func runCLI(args []string, stdin io.Reader, out io.Writer) error {
 		return errors.New(usage)
 	}
 	return nil
+}
+
+// pollEvent is the poll line after "EVENT ": since is the previous poll, so the agent
+// knows how far back to look.
+func pollEvent(p Prompt, prev string) string {
+	if prev == "" {
+		prev = "never"
+	}
+	return fmt.Sprintf("poll %s %q since=%s", p.ID, p.Name, prev)
 }
