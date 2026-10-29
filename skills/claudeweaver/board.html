@@ -98,6 +98,14 @@ body:not(.closed) .col[data-status=wontfix] { display: none; }
   body { padding-right: min(600px, 100vw); }
   #panel, #panel:not(.open) { transform: none; visibility: visible; box-shadow: none; transition: none; }
   #p-close { display: none; }
+  /* Every lane fits beside the panel, so the board does not scroll sideways. */
+  #columns { grid-auto-columns: minmax(0, 1fr); gap: 8px; padding: 12px; }
+  .col h2 { font-size: 13px; padding: 4px 4px 8px; }
+  .card { padding: 8px 9px 7px; }
+  .card h3 { font-size: 13px; }
+  .meta { gap: 4px 7px; flex-wrap: wrap; font-size: 11px; }
+  .kind { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; } /* a long type ends in … */
+  .kind::before { margin-right: 5px; vertical-align: 1px; }
 }
 /* Toolbox along the bottom of the board. */
 #toolbox { flex: none; border-top: 1px solid var(--line); background: var(--paper); padding: 10px 20px 12px; max-height: 32vh; overflow-y: auto; }
@@ -790,7 +798,8 @@ body.selecting #columns { padding-bottom: 96px; }
     if (id) document.querySelector(`.card[data-id="${id}"]`)?.focus();
   }
   $("#p-close").onclick = close;
-  $("#p-done").onclick = () => { $("#p-status").value = "done"; touched.add("status"); close(); }; // close saves the change
+  // Close saves the change. Docked, the ticket stays in the panel instead.
+  $("#p-done").onclick = () => { $("#p-status").value = "done"; touched.add("status"); docked.matches ? saveNow() : close(); };
   // A click outside the panel closes it. Cards switch tickets instead; the lightbox handles its own clicks.
   document.addEventListener("click", (e) => {
     if (!panel.classList.contains("open") || docked.matches || $("#rp-dialog").open) return; // docked, the panel stays
@@ -860,6 +869,7 @@ body.selecting #columns { padding-bottom: 96px; }
       if (quiet && dirty && current === String(t.id)) return;
       if (searching && current !== String(t.id)) endSearch(); // j/k switch tickets quietly
       current = String(t.id); dirty = false; fill(t); if (!quiet) { setTab(false); msg(""); }
+      try { localStorage.setItem("cw:last", current); } catch {} // per browser, for openDefault
       history.replaceState(null, "", "#t=" + t.id); show(); // focus stays put so 1-6, j/k and e keep working
     } catch (e) { if (!quiet) alert("Could not open #" + id + ": " + e.message); }
   }
@@ -931,8 +941,17 @@ body.selecting #columns { padding-bottom: 96px; }
   loadPrompts(); setInterval(renderPrompts, 60_000); // keeps "ran N ago" current
 
   applyFilters();
-  const openHash =() => { const m = location.hash.match(/^#t=(\d+)$/); if (m) openTicket(m[1]); };
-  openHash(); addEventListener("hashchange", openHash); // the devnotes overlay opens tickets by hash
+  const openHash =() => { const m = location.hash.match(/^#t=(\d+)$/); if (m) openTicket(m[1]); return !!m; };
+  // Docked, the panel always shows a ticket: the last one opened in this browser, else the first card.
+  async function openDefault() {
+    if (current || !docked.matches) return;
+    let last = null;
+    try { last = localStorage.getItem("cw:last"); } catch {}
+    if (last) await openTicket(last, true);
+    if (!current) { const c = document.querySelector(".card"); if (c) await openTicket(c.dataset.id, true); }
+  }
+  openHash() || openDefault(); addEventListener("hashchange", openHash); // the devnotes overlay opens tickets by hash
+  docked.addEventListener("change", openDefault);
 })();
 </script>
 </body>
