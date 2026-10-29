@@ -51,7 +51,8 @@ type Ticket struct {
 	UA          string            `json:"ua,omitempty"`
 	Screenshot  string            `json:"screenshot,omitempty"`
 	Repo        string            `json:"repo,omitempty"`     // where the work happens: a local directory or a repo URL
-	PRs         []string          `json:"prs,omitempty"`      // pull request URLs; one space-separated "prs:" line in the file
+	PRs         []string          `json:"prs,omitempty"`      // PRs the session created; one space-separated "prs:" line in the file
+	Refs        []string          `json:"refs,omitempty"`     // PRs the session referenced; one "refs:" line
 	Images      []string          `json:"images,omitempty"`   // "assets/<name>" paths: the screenshot field plus image links in the body
 	Extra       map[string]string `json:"extra,omitempty"`    // unknown frontmatter fields, read-only
 	Body        string            `json:"body"`               // markdown before "## Notes"
@@ -62,7 +63,7 @@ type Ticket struct {
 
 var knownKeys = map[string]bool{"id": true, "title": true, "type": true, "status": true, "priority": true,
 	"area": true, "created": true, "updated": true, "source": true, "url": true, "selector": true,
-	"element_text": true, "viewport": true, "device": true, "screen": true, "app": true, "ua": true, "screenshot": true, "repo": true, "prs": true}
+	"element_text": true, "viewport": true, "device": true, "screen": true, "app": true, "ua": true, "screenshot": true, "repo": true, "prs": true, "refs": true}
 
 // ---- file format ----
 
@@ -283,7 +284,7 @@ func toTicket(name string, d *doc) Ticket {
 	t := Ticket{File: name, Title: f["title"], Type: f["type"], Status: f["status"], Priority: f["priority"],
 		Area: f["area"], Created: f["created"], Updated: f["updated"], Source: f["source"], URL: f["url"],
 		Selector: f["selector"], ElementText: f["element_text"], Viewport: f["viewport"], Device: f["device"], Screen: f["screen"], App: f["app"], UA: f["ua"],
-		Screenshot: f["screenshot"], Repo: f["repo"], PRs: strings.Fields(f["prs"])}
+		Screenshot: f["screenshot"], Repo: f["repo"], PRs: strings.Fields(f["prs"]), Refs: strings.Fields(f["refs"])}
 	t.ID, _ = strconv.Atoi(f["id"])
 	if t.ID <= 0 {
 		t.ID = idFromName(name)
@@ -596,7 +597,8 @@ type Patch struct {
 	Area     *string   `json:"area"`
 	Body     *string   `json:"body"`
 	Repo     *string   `json:"repo"`
-	PRs      *[]string `json:"prs"` // replaces the list
+	PRs      *[]string `json:"prs"`  // PRs the session created; replaces the list
+	Refs     *[]string `json:"refs"` // PRs the session referenced; replaces the list
 }
 
 // prURL accepts http and https URLs only: the board renders each PR as a link.
@@ -606,6 +608,20 @@ func prURL(s string) error {
 		return fmt.Errorf("bad PR URL %q: want an http or https link", s)
 	}
 	return nil
+}
+
+// prLine checks a PR list and joins it into one frontmatter value; nil stays nil (no change).
+func prLine(list *[]string) (*string, error) {
+	if list == nil {
+		return nil, nil
+	}
+	for _, u := range *list {
+		if err := prURL(u); err != nil {
+			return nil, err
+		}
+	}
+	joined := strings.Join(*list, " ")
+	return &joined, nil
 }
 
 func (s *Store) Update(id int, p Patch) (Ticket, error) {
@@ -634,21 +650,19 @@ func (s *Store) Update(id int, p Patch) (Ticket, error) {
 		}
 		p.Repo = &r
 	}
-	var prs *string
-	if p.PRs != nil {
-		for _, u := range *p.PRs {
-			if err := prURL(u); err != nil {
-				return Ticket{}, err
-			}
-		}
-		joined := strings.Join(*p.PRs, " ")
-		prs = &joined
+	prs, err := prLine(p.PRs)
+	if err != nil {
+		return Ticket{}, err
+	}
+	refs, err := prLine(p.Refs)
+	if err != nil {
+		return Ticket{}, err
 	}
 	return s.modify(id, func(d *doc) error {
 		for _, kv := range []struct {
 			k string
 			v *string
-		}{{"title", p.Title}, {"type", p.Type}, {"status", p.Status}, {"priority", p.Priority}, {"area", p.Area}, {"repo", p.Repo}, {"prs", prs}} {
+		}{{"title", p.Title}, {"type", p.Type}, {"status", p.Status}, {"priority", p.Priority}, {"area", p.Area}, {"repo", p.Repo}, {"prs", prs}, {"refs", refs}} {
 			if kv.v != nil {
 				d.set(kv.k, *kv.v)
 			}

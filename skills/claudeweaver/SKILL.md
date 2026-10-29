@@ -41,7 +41,7 @@ The same binary is a CLI. All commands take `--dir` and `--areas`.
 ./.claudeweaver new --title "..." --type bug --area web --status todo --body - < notes.md
 ./.claudeweaver mv 1003 doing
 ./.claudeweaver note 1003 "Picked this up." --by claude
-./.claudeweaver set 1003 --repo ~/Development/myapp --pr https://github.com/org/myapp/pull/12
+./.claudeweaver set 1003 --repo ~/Development/myapp --pr https://github.com/org/myapp/pull/12 --ref https://github.com/org/lib/pull/3
 ```
 
 You can also edit the ticket files directly. A write through the tool changes only the lines it touches. It keeps unknown fields, comments and the body.
@@ -129,7 +129,8 @@ app: browser       # tauri-ios | tauri-desktop | browser
 ua: Safari iOS     # short browser and OS, not the full user agent
 screenshot: tickets/assets/1007.png   # optional
 repo: ~/Development/myapp   # optional: where the work happens, a directory or a repo URL
-prs: https://github.com/org/myapp/pull/12 https://github.com/org/lib/pull/3   # optional, space-separated
+prs: https://github.com/org/myapp/pull/12   # optional: PRs the session created, space-separated
+refs: https://github.com/org/lib/pull/3     # optional: PRs the session referenced, space-separated
 ---
 
 What the human wrote.
@@ -158,7 +159,7 @@ Images go in `tickets/assets/<id>.png`, then `<id>-2.png` and so on. The body li
 
 - When you start a ticket, set `status: doing` immediately. The human watches the board to see what is in progress. If you give the ticket to a subagent, set `doing` before you hand it over, or tell the subagent to set it first.
 - Add a note with your name when you start, for example `./.claudeweaver note 1007 "Started." --by claude`.
-- When the work happens outside the board's own repo, set `repo` when you start. Add each pull request that you open or reference to `prs` as you go, for example `./.claudeweaver set 1007 --repo ~/Development/myapp --pr https://github.com/org/myapp/pull/12`. `--pr` adds to the list and skips a PR that is already there. The ticket panel shows both.
+- When the work happens outside the board's own repo, set `repo` when you start. As you go, add each pull request that you open with `--pr`, and each one that you read, review or mention with `--ref`, for example `./.claudeweaver set 1007 --repo ~/Development/myapp --pr https://github.com/org/myapp/pull/12 --ref https://github.com/org/lib/pull/3`. Both add to their list and skip a PR that is already there. The ticket panel shows the repo, PRs created and PRs referenced.
 - Notes are append-only. Add a new note. Do not rewrite old notes.
 - Commit as you work, not at the end. Put the ticket id in the commit message, for example `settings: keep the save button above the footer (1007)`.
 - If you cannot continue without a decision or a review from the human, set `status: blocked`. Write the question in a `## Blocked` section or in a note. Give the options that you see and the one that you recommend. Then start other work. Do not wait.

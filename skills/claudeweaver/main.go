@@ -140,10 +140,11 @@ func changes(a, b Ticket) string {
 	var out []string
 	for _, f := range []struct{ k, a, b string }{{"status", a.Status, b.Status}, {"type", a.Type, b.Type},
 		{"priority", a.Priority, b.Priority}, {"area", a.Area, b.Area}, {"title", a.Title, b.Title},
-		{"repo", a.Repo, b.Repo}, {"prs", strings.Join(a.PRs, " "), strings.Join(b.PRs, " ")}} {
+		{"repo", a.Repo, b.Repo}, {"prs", strings.Join(a.PRs, " "), strings.Join(b.PRs, " ")},
+		{"refs", strings.Join(a.Refs, " "), strings.Join(b.Refs, " ")}} {
 		if f.a != f.b {
 			v := f.b
-			if f.k == "title" || f.k == "repo" || f.k == "prs" {
+			if f.k == "title" || f.k == "repo" || f.k == "prs" || f.k == "refs" {
 				v = strconv.Quote(v)
 			}
 			out = append(out, f.k+"="+v)
@@ -536,7 +537,7 @@ const usage = `usage:
   claudeweaver new --title "..." [--type bug] [--area web] [--priority p2] [--status todo] [--body - | --body "text"]
   claudeweaver mv <id> <status>
   claudeweaver note <id> "text" [--by name]
-  claudeweaver set <id> [--repo ~/Development/app | --repo https://github.com/org/app] [--pr URL]...   (--pr adds to the list)
+  claudeweaver set <id> [--repo ~/Development/app | --repo https://github.com/org/app] [--pr URL]... [--ref URL]...   (--pr adds a PR you created, --ref one you referenced)
   claudeweaver [-addr :8090] [-dir tickets] [-areas web,server,docs,infra] [-tailnet-host name]     (serve the board)
 All commands take --dir and --areas.`
 
@@ -553,8 +554,9 @@ func runCLI(args []string, stdin io.Reader, out io.Writer) error {
 	source := fs.String("source", "agent", "")
 	by := fs.String("by", "", "")
 	repo := fs.String("repo", "", "")
-	var prs []string
-	fs.Func("pr", "pull request URL; repeat to add more", func(v string) error { prs = append(prs, v); return nil })
+	var prs, refs []string
+	fs.Func("pr", "URL of a PR the session created; repeat to add more", func(v string) error { prs = append(prs, v); return nil })
+	fs.Func("ref", "URL of a PR the session referenced; repeat to add more", func(v string) error { refs = append(refs, v); return nil })
 	// Allow flags after positional args: "note 12 text --by x".
 	var pos []string
 	rest := args[1:]
@@ -649,24 +651,31 @@ func runCLI(args []string, stdin io.Reader, out io.Writer) error {
 				p.Repo = repo
 			}
 		})
-		if len(prs) > 0 {
+		if len(prs) > 0 || len(refs) > 0 {
 			t, err := st.Get(id)
 			if err != nil {
 				return err
 			}
-			list := t.PRs
-			for _, u := range prs {
-				if !slices.Contains(list, u) {
-					list = append(list, u)
+			add := func(list, urls []string) *[]string {
+				for _, u := range urls {
+					if !slices.Contains(list, u) {
+						list = append(list, u)
+					}
 				}
+				return &list
 			}
-			p.PRs = &list
+			if len(prs) > 0 {
+				p.PRs = add(t.PRs, prs)
+			}
+			if len(refs) > 0 {
+				p.Refs = add(t.Refs, refs)
+			}
 		}
 		t, err := st.Update(id, p)
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(out, "#%d repo=%q prs=%q\n", t.ID, t.Repo, strings.Join(t.PRs, " "))
+		fmt.Fprintf(out, "#%d repo=%q prs=%q refs=%q\n", t.ID, t.Repo, strings.Join(t.PRs, " "), strings.Join(t.Refs, " "))
 	default:
 		return errors.New(usage)
 	}

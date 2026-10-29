@@ -758,3 +758,28 @@ func TestWorkTypes(t *testing.T) {
 		t.Error("unknown type accepted")
 	}
 }
+
+func TestReferencedPRs(t *testing.T) {
+	s := fixedStore(t)
+	writeFile(t, s, "0601-x.md", "---\nid: 601\ntitle: X\nprs: https://github.com/o/a/pull/1\n---\n\nHello.\n")
+	ref1, ref2 := "https://github.com/o/b/pull/2", "https://github.com/o/c/pull/3"
+	got, err := s.Update(601, Patch{Refs: &[]string{ref1}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fmt.Sprint(got.Refs) != fmt.Sprint([]string{ref1}) || fmt.Sprint(got.PRs) != "[https://github.com/o/a/pull/1]" {
+		t.Fatalf("refs %q prs %q", got.Refs, got.PRs)
+	}
+	if !strings.Contains(readFile(t, s, "0601-x.md"), "refs: "+ref1+"\n") {
+		t.Fatal("refs line not written")
+	}
+	if _, err := s.Update(601, Patch{Refs: &[]string{"javascript:alert(1)"}}); err == nil {
+		t.Error("javascript: ref accepted")
+	}
+	if err := runCLI([]string{"set", "601", "--ref", ref1, "--ref", ref2, "--dir", s.Dir}, strings.NewReader(""), io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ = s.Get(601); fmt.Sprint(got.Refs) != fmt.Sprint([]string{ref1, ref2}) || len(got.PRs) != 1 {
+		t.Fatalf("after set: refs %q prs %q", got.Refs, got.PRs)
+	}
+}

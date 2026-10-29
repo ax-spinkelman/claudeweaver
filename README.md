@@ -41,7 +41,7 @@ Open http://localhost:8090. Then add this tag to the dev build of your app only:
 
 ### Tickets are Markdown files
 
-Each ticket is one file, for example `tickets/1007-save-button-overlaps-footer.md`. The file has YAML frontmatter (id, title, type, status, priority, area, source, and optionally repo and prs) and a Markdown body. `repo` is where the work happens and `prs` lists the pull requests. The ticket panel shows both as links. You commit the tickets to git with your code. You, the agent and the board all edit the same files. A write by the board changes only the lines it needs and keeps everything else.
+Each ticket is one file, for example `tickets/1007-save-button-overlaps-footer.md`. The file has YAML frontmatter (id, title, type, status, priority, area, source, and optionally repo, prs and refs) and a Markdown body. `repo` is where the work happens, `prs` lists the pull requests the session created and `refs` the ones it referenced. The ticket panel shows them as links. You commit the tickets to git with your code. You, the agent and the board all edit the same files. A write by the board changes only the lines it needs and keeps everything else.
 
 A ticket moves through these statuses: `inbox`, `todo`, `doing`, `blocked`, `review`, and then `done` or `wontfix`. The agent sets `doing` when it starts and `review` when it finishes. Only you set `done`.
 
