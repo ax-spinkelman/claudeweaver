@@ -629,6 +629,9 @@ func (s *Store) Update(id int, p Patch) (Ticket, error) {
 	}
 	if p.Repo != nil {
 		r := oneLine(*p.Repo, 300)
+		if h, err := os.UserHomeDir(); err == nil && strings.HasPrefix(r, h+"/") {
+			r = "~" + r[len(h):] // the shell expands an unquoted ~; keep the file the same on every machine
+		}
 		p.Repo = &r
 	}
 	var prs *string

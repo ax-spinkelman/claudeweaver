@@ -738,4 +738,11 @@ func TestRepoAndPRs(t *testing.T) {
 	if got, _ = s.Get(501); fmt.Sprint(got.PRs) != fmt.Sprint([]string{pr1, pr2, pr3}) || got.Repo != repo {
 		t.Fatalf("after set: repo %q prs %q", got.Repo, got.PRs)
 	}
+
+	// The shell expands an unquoted ~. The file keeps ~ so it works on another machine.
+	home, _ := os.UserHomeDir()
+	abs := home + "/Development/ax-vuln-sync"
+	if got, _ = s.Update(501, Patch{Repo: &abs}); got.Repo != repo {
+		t.Fatalf("home path stored as %q, want %q", got.Repo, repo)
+	}
 }
