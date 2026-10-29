@@ -24,7 +24,7 @@ var (
 	Types      = []string{"bug", "feature", "chore", "review", "research", "observability", "claudeweaver-internal"}
 	Priorities = []string{"p1", "p2", "p3"}
 	Areas      = []string{"web", "server", "docs", "infra"}
-	Sources    = []string{"devnote", "human", "agent", "prompt"} // prompt: filed by a recurring prompt
+	Sources    = []string{"devnote", "human", "agent"}
 )
 
 // MinToolID is the lowest id the tool hands out. Lower ids are free for hand-made tickets.
@@ -967,7 +967,7 @@ func (s *Store) RunPrompt(id string) (Ticket, error) {
 		return Ticket{}, err
 	}
 	p := toPrompt(id, d)
-	t, err := s.Create(NewTicket{Title: p.Name, Type: p.Type, Status: "todo", Source: "prompt", Body: p.Text})
+	t, err := s.Create(NewTicket{Title: p.Name, Type: p.Type, Status: "todo", Source: "human", Body: p.Text})
 	if err != nil {
 		return Ticket{}, err
 	}
