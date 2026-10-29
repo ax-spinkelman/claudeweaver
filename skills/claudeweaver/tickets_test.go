@@ -693,4 +693,19 @@ func TestNoteMessages(t *testing.T) {
 	if fmt.Sprintf("%q", got.Messages) != fmt.Sprintf("%q", want) {
 		t.Fatalf("messages:\n%q\nwant:\n%q", got.Messages, want)
 	}
+
+	// A heading such as "## Resolution" ends the note above it. Later notes still split.
+	writeFile(t, s, "0402-x.md", "---\nid: 402\ntitle: X\n---\n\n## Notes\n\n- 2026-10-17 09:30Z (claude): Fixed.\n\n## Resolution\n\nChanged `x`.\n\n- 2026-10-17 09:31Z (human): Thanks.\n")
+	got, err = s.Get(402)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want = []Message{
+		{At: "2026-10-17 09:30Z", By: "claude", Text: "Fixed."},
+		{Text: "## Resolution\n\nChanged `x`."},
+		{At: "2026-10-17 09:31Z", By: "human", Text: "Thanks."},
+	}
+	if fmt.Sprintf("%q", got.Messages) != fmt.Sprintf("%q", want) {
+		t.Fatalf("with a resolution:\n%q\nwant:\n%q", got.Messages, want)
+	}
 }

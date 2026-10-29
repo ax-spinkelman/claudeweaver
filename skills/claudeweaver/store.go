@@ -240,7 +240,8 @@ func notesText(section string) string {
 }
 
 // Message is one note as AddNote writes it: "- <at> (<by>): text", with
-// the following lines indented two spaces. Text above the first note has no At.
+// the following lines indented two spaces. Text above the first note, and a
+// "## " section such as "## Resolution", has no At.
 type Message struct {
 	At   string `json:"at,omitempty"`
 	By   string `json:"by,omitempty"`
@@ -256,7 +257,7 @@ func messages(notes string) []Message {
 			out = append(out, Message{At: m[1], By: m[2], Text: m[3]})
 			continue
 		}
-		if len(out) == 0 {
+		if len(out) == 0 || strings.HasPrefix(l, "## ") { // a heading such as "## Resolution" ends the note above
 			out = append(out, Message{})
 		}
 		out[len(out)-1].Text += "\n" + strings.TrimPrefix(l, "  ")

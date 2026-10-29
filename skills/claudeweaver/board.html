@@ -118,6 +118,7 @@ textarea.field { height: auto; min-height: 160px; padding: 10px; resize: vertica
 .notes-head button:hover { color: var(--text); background: var(--hover); }
 .convo .turn { display: grid; grid-template-columns: 14px 1fr; gap: 8px; padding: 8px 10px; margin: 6px 0; border-radius: 8px; }
 .convo .human { background: var(--frost); }
+.convo .section { border-top: 1px solid var(--line); border-radius: 0; padding-top: 12px; }
 .convo .human pre { background: var(--paper); }
 .convo .mark { font: 700 12px/18px ui-monospace, monospace; color: #D97757; }
 .convo .agent .mark { font-size: 10px; }
@@ -537,13 +538,20 @@ body.selecting #columns { padding-bottom: 96px; }
 
   // ---- markdown (small subset, escaped first) ----
   const esc = (s) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
-  const inline = (s) => esc(s)
-    .replace(/`([^`]+)`/g, "<code>$1</code>")
-    .replace(/!\[([^\]]*)\]\((assets\/[\w.-]+)\)/g, '<img alt="$1" src="/$2">')
-    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-    .replace(/(^|[^*])\*([^*\s][^*]*)\*/g, "$1<em>$2</em>")
-    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
-    .replace(/(^|[\s(])(https?:\/\/[^\s<]+[^\s<.,;:!?)'"])/g, '$1<a href="$2" target="_blank" rel="noopener">$2</a>'); // bare URLs, as on GitHub
+  // Code, images and links become finished HTML held aside as \0<n>\0, so a later rule never
+  // runs inside a tag or an attribute (a bare URL inside an alt text once broke out of it).
+  const inline = (s) => {
+    const held = [], hold = (html) => `\0${held.push(html) - 1}\0`;
+    const a = (url, text) => hold(`<a href="${url}" target="_blank" rel="noopener">${text}</a>`);
+    return esc(s.replace(/\0/g, ""))
+      .replace(/`([^`]+)`/g, (_, c) => hold(`<code>${c}</code>`))
+      .replace(/!\[([^\]]*)\]\((assets\/[\w.-]+)\)/g, (_, alt, src) => hold(`<img alt="${alt}" src="/${src}">`))
+      .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, (_, text, url) => a(url, text))
+      .replace(/(^|[\s(])(https?:\/\/[^\s<]+[^\s<.,;:!?)'"*])/g, (_, pre, url) => pre + a(url, url)) // bare URLs, as on GitHub
+      .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+      .replace(/(^|[^*])\*([^*\s][^*]*)\*/g, "$1<em>$2</em>")
+      .replace(/\0(\d+)\0/g, (_, i) => held[i]);
+  };
   const pre = (src, lang) => "<pre><code>" + (lang !== "diff" ? esc(src) : src.split("\n")
     .map((l) => /^[+-]/.test(l) ? `<span class="${l[0] === "+" ? "add" : "del"}">${esc(l)}</span>` : esc(l)).join("\n")) + "</code></pre>";
   function md(src, breaks) {
@@ -625,6 +633,7 @@ body.selecting #columns { padding-bottom: 96px; }
 
   // ---- notes as a conversation, with search ----
   const turn = (m) => {
+    if (!m.at) return `<div class="turn section"><span class="mark"></span><div class="body">${md(m.text, true)}</div></div>`; // "## Resolution" and the like
     const human = m.by === "human"; // humanAuthors in store.go
     const d = new Date((m.at || "").replace(" ", "T"));
     const when = isNaN(d) ? "" : d.toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
