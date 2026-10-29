@@ -53,6 +53,8 @@ The board is one Go program that uses only the standard library. It has no datab
 
 On the board, N opens quick add, J and K move between cards, and keys 1 to 6 move a card to a column. You can paste a screenshot into quick add or into the ticket panel. The icon of the Doing column turns, so you can see that work is in progress. The Blocked column is red and has a stop-sign icon.
 
+The notes of a ticket read as a conversation. Your notes are in a shaded box with a `❯` mark, and agent notes have a `●` mark. Notes take Markdown, with ``` code blocks in a monospace font. Cmd+Enter sends a note. Cmd+F searches the notes of the open ticket, and Esc ends the search.
+
 ### The overlay
 
 The overlay is one script, `devnotes.js`. It runs in a shadow root, so it does not change the styles of your page.
