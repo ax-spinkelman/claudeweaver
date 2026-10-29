@@ -131,6 +131,11 @@ textarea.field { height: auto; min-height: 160px; padding: 10px; resize: vertica
 .md > :first-child { margin-top: 0; } .md > :last-child { margin-bottom: 0; }
 .md pre { background: var(--frost); border: 1px solid var(--line); padding: 8px 10px; border-radius: 8px; overflow-x: auto; font-size: 12.5px; line-height: 1.45; }
 .md pre code { font-size: inherit; }
+.code1 { position: relative; margin: 1em 0; }
+.code1 pre { margin: 0; padding-right: 42px; }
+.copy { position: absolute; top: 50%; right: 6px; transform: translateY(-50%); display: grid; place-items: center; width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); color: var(--graphite); cursor: pointer; }
+.copy:hover { color: var(--text); }
+.copy.done { color: var(--add); border-color: var(--add); }
 .md .add { color: var(--add); } .md .del { color: var(--del); }
 .md h1, .md h2, .md h3 { font-size: 15px; margin: 14px 0 6px; }
 .preview { border: 1px solid var(--line); border-radius: 8px; padding: 10px; min-height: 160px; }
@@ -596,8 +601,19 @@ body.selecting #columns { padding-bottom: 96px; }
       .replace(/(^|[^*])\*([^*\s][^*]*)\*/g, "$1<em>$2</em>")
       .replace(/\0(\d+)\0/g, (_, i) => held[i]);
   };
-  const pre = (src, lang) => "<pre><code>" + (lang !== "diff" ? esc(src) : src.split("\n")
-    .map((l) => /^[+-]/.test(l) ? `<span class="${l[0] === "+" ? "add" : "del"}">${esc(l)}</span>` : esc(l)).join("\n")) + "</code></pre>";
+  const COPY = '<button type="button" class="copy" aria-label="Copy" title="Copy"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>';
+  const pre = (src, lang) => {
+    const html = "<pre><code>" + (lang !== "diff" ? esc(src) : src.split("\n")
+      .map((l) => /^[+-]/.test(l) ? `<span class="${l[0] === "+" ? "add" : "del"}">${esc(l)}</span>` : esc(l)).join("\n")) + "</code></pre>";
+    return src.includes("\n") ? html : `<div class="code1">${html}${COPY}</div>`; // one line is usually a command to paste
+  };
+  document.addEventListener("click", async (e) => {
+    const b = e.target.closest?.(".copy");
+    if (!b) return;
+    try { await navigator.clipboard.writeText(b.previousElementSibling.textContent); } catch { return; }
+    b.classList.add("done"); b.setAttribute("aria-label", "Copied"); b.title = "Copied";
+    setTimeout(() => { b.classList.remove("done"); b.setAttribute("aria-label", "Copy"); b.title = "Copy"; }, 1500);
+  });
   function md(src, breaks) {
     const out = []; let list = null, para = [], code = null, lang = "";
     // Hard-wrapped source lines flow as one paragraph; two trailing spaces force a break.
