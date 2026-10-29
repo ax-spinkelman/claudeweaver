@@ -105,7 +105,7 @@ Each image must be 5 MB or less, and one request takes 10 images at most. If a p
 
 ## Recurring prompts
 
-The human keeps prompts that they run every few days in the toolbox at the bottom of the board. Each prompt is `tickets/prompts/<id>.md`, with the frontmatter `name`, `type`, `repo` and `last_run`, and the prompt text as the body. Run in the toolbox files the prompt as a `todo` ticket, with the prompt's name as the title, its text as the description, and its type and repo. The board prints the usual `EVENT created` line, so work that ticket like any other. Do not edit a prompt file unless the human asks.
+The human keeps prompts that they run every few days in the toolbox at the bottom of the board. Each prompt is `tickets/prompts/<id>.md`, with the frontmatter `name`, `type`, `repo` and `last_run`, and the prompt text as the body. Run in the toolbox files the prompt as a `todo` ticket with `source: prompt`, the prompt's name as the title, its text as the description, and its type and repo. The board prints the usual `EVENT created` line, so work that ticket like any other. Do not edit a prompt file unless the human asks.
 
 ## Ticket format
 
@@ -121,7 +121,7 @@ priority: p2       # p1 (urgent) | p2 | p3 (someday)
 area: web          # one of -areas
 created: 2026-10-16T18:04:00Z
 updated: 2026-10-16T18:04:00Z
-source: devnote    # devnote | human | agent
+source: devnote    # devnote | human | agent | prompt (filed by a recurring prompt)
 # Only when source is devnote:
 url: http://localhost:5173/settings
 selector: "main > form button.save"

@@ -818,7 +818,7 @@ func TestPrompts(t *testing.T) {
 		t.Fatalf("event: %q", out.String())
 	}
 	tk, _ := s.Get(1000)
-	if tk.Status != "todo" || tk.Type != "observability" || tk.Repo != "~/Development/ax-vuln-sync" || tk.Body != "New text" || tk.Source != "human" {
+	if tk.Status != "todo" || tk.Type != "observability" || tk.Repo != "~/Development/ax-vuln-sync" || tk.Body != "New text" || tk.Source != "prompt" {
 		t.Fatalf("ticket %+v", tk)
 	}
 	ps, err := s.Prompts()

@@ -970,6 +970,7 @@ body.selecting #columns { padding-bottom: 96px; }
         <span class="prio {{.Priority}}">{{.Priority}}</span>
         {{if .Area}}<span>{{.Area}}</span>{{end}}
         {{if eq .Source "devnote"}}<span class="pin" title="Dropped as a sticky note">note</span>{{end}}
+        {{if eq .Source "prompt"}}<span class="pin" title="Filed by a recurring prompt">recurring prompt</span>{{end}}
         <span class="age" title="Created {{.Created}}">#{{.ID}}{{with age .Created}}, {{.}}{{end}}</span>
       </div>
     </li>{{else}}<li class="empty">Nothing here.</li>{{end}}
