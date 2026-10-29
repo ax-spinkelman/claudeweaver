@@ -111,7 +111,7 @@ The file name is `tickets/<id>-<slug>.md`, for example `tickets/1007-save-button
 ---
 id: 1007
 title: Save button overlaps footer
-type: bug          # bug | feature | chore
+type: bug          # bug | feature | chore | review | research | observability | claudeweaver-internal
 status: inbox      # inbox | todo | doing | blocked | review | done | wontfix
 priority: p2       # p1 (urgent) | p2 | p3 (someday)
 area: web          # one of -areas
@@ -171,7 +171,7 @@ Images go in `tickets/assets/<id>.png`, then `<id>-2.png` and so on. The body li
 
 - The title is one short line that names the problem or the result, for example "Save button overlaps footer".
 - The body gives the facts that a new reader needs without the chat history: what happens, what you expected, where it happens (file, URL, command) and why it matters.
-- Choose `type` from bug, feature or chore. Use p1 only for urgent work, and p3 for work that can wait.
+- Choose `type` from bug, feature, chore, review (review a PR or a change), research (find something out), observability (alerts, dashboards, logs) or claudeweaver-internal (work on the board itself). Use p1 only for urgent work, and p3 for work that can wait.
 - One ticket is one piece of work. If you find two problems, file two tickets.
 
 ## How to write a Resolution

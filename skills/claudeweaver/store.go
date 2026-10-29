@@ -21,7 +21,7 @@ import (
 // validated against these. Areas is set by the -areas flag.
 var (
 	Statuses   = []string{"inbox", "todo", "doing", "blocked", "review", "done", "wontfix"}
-	Types      = []string{"bug", "feature", "chore"}
+	Types      = []string{"bug", "feature", "chore", "review", "research", "observability", "claudeweaver-internal"}
 	Priorities = []string{"p1", "p2", "p3"}
 	Areas      = []string{"web", "server", "docs", "infra"}
 	Sources    = []string{"devnote", "human", "agent"}

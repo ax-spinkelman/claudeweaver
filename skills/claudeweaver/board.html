@@ -68,11 +68,15 @@ body:not(.closed) .col[data-status=wontfix] { display: none; }
 .col[data-status=done] .card h3, .col[data-status=wontfix] .card h3 { color: var(--graphite); font-weight: 500; }
 .meta { display: flex; gap: 10px; align-items: center; font-size: 12px; font-weight: 500; color: var(--graphite); }
 .meta .age { margin-left: auto; }
-.kind { display: inline-flex; align-items: center; gap: 5px; }
+.kind { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
 .kind::before { content: ""; width: 8px; height: 8px; display: inline-block; }
 .kind.bug::before { background: var(--cherry); border-radius: 50%; }
 .kind.feature::before { background: var(--raspberry); border-radius: 2px; }
 .kind.chore::before { border: 1.5px solid var(--graphite); border-radius: 50%; width: 7px; height: 7px; }
+.kind.review::before { border: 1.5px solid var(--raspberry); border-radius: 2px; width: 7px; height: 7px; }
+.kind.research::before { border: 1.5px solid var(--add); border-radius: 50%; width: 7px; height: 7px; }
+.kind.observability::before { background: var(--add); border-radius: 2px; }
+.kind.claudeweaver-internal::before { background: var(--graphite); transform: rotate(45deg); width: 7px; height: 7px; }
 .prio.p1 { color: var(--cherry); font-weight: 700; }
 .prio.p3 { opacity: .7; }
 .pin { color: var(--raspberry); }
@@ -283,6 +287,7 @@ body.selecting #columns { padding-bottom: 96px; }
   const $ = (s) => document.querySelector(s);
   const STATUSES = ["inbox", "todo", "doing", "blocked", "review", "done", "wontfix"];
   const AREAS = [...$("#p-area").options].map((o) => o.value);
+  const TYPES = [...$("#p-type").options].map((o) => o.value);
   const api = async (method, path, body) => {
     const r = await fetch(path, { method, headers: body ? { "Content-Type": "application/json" } : {}, body: body ? JSON.stringify(body) : undefined });
     if (!r.ok) throw new Error((await r.text()).trim() || r.statusText);
@@ -405,8 +410,8 @@ body.selecting #columns { padding-bottom: 96px; }
   // "feat: Rail jumps p1 #web" -> {type: feature, priority: p1, area: web, title: "Rail jumps"}
   function parseQuick(s) {
     const t = { type: "bug", priority: "p2", area: $("#f-area").value || AREAS[0] };
-    const m = s.match(/^\s*(feat|feature|bug|chore)\s*:\s*/i);
-    if (m) { t.type = { feat: "feature", feature: "feature" }[m[1].toLowerCase()] || m[1].toLowerCase(); s = s.slice(m[0].length); }
+    const m = s.match(/^\s*([a-z][\w-]*)\s*:\s*/i), k = m && (m[1].toLowerCase() === "feat" ? "feature" : m[1].toLowerCase());
+    if (m && TYPES.includes(k)) { t.type = k; s = s.slice(m[0].length); } // "Cloudweaver: ..." stays in the title
     s = s.replace(/(^|\s)(p[1-3])(?=\s|$)/i, (_, a, p) => { t.priority = p.toLowerCase(); return a; });
     s = s.replace(/(^|\s)#([a-z]+)(?=\s|$)/i, (all, a, area) => AREAS.includes(area.toLowerCase()) ? ((t.area = area.toLowerCase()), a) : all);
     t.title = s.replace(/\s+/g, " ").trim();

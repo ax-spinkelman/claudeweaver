@@ -746,3 +746,15 @@ func TestRepoAndPRs(t *testing.T) {
 		t.Fatalf("home path stored as %q, want %q", got.Repo, repo)
 	}
 }
+
+func TestWorkTypes(t *testing.T) {
+	s := fixedStore(t)
+	for _, typ := range []string{"review", "research", "observability", "claudeweaver-internal"} {
+		if tk, err := s.Create(NewTicket{Title: "X", Type: typ}); err != nil || tk.Type != typ {
+			t.Errorf("create type %q: %v %q", typ, err, tk.Type)
+		}
+	}
+	if _, err := s.Create(NewTicket{Title: "X", Type: "cloudweaver"}); err == nil {
+		t.Error("unknown type accepted")
+	}
+}
