@@ -141,10 +141,11 @@ func changes(a, b Ticket) string {
 	for _, f := range []struct{ k, a, b string }{{"status", a.Status, b.Status}, {"type", a.Type, b.Type},
 		{"priority", a.Priority, b.Priority}, {"area", a.Area, b.Area}, {"title", a.Title, b.Title},
 		{"repo", a.Repo, b.Repo}, {"prs", strings.Join(a.PRs, " "), strings.Join(b.PRs, " ")},
-		{"refs", strings.Join(a.Refs, " "), strings.Join(b.Refs, " ")}} {
+		{"refs", strings.Join(a.Refs, " "), strings.Join(b.Refs, " ")},
+		{"mcps", strings.Join(a.MCPs, " "), strings.Join(b.MCPs, " ")}} {
 		if f.a != f.b {
 			v := f.b
-			if f.k == "title" || f.k == "repo" || f.k == "prs" || f.k == "refs" {
+			if f.k != "status" && f.k != "type" && f.k != "priority" && f.k != "area" {
 				v = strconv.Quote(v)
 			}
 			out = append(out, f.k+"="+v)
@@ -580,9 +581,10 @@ func runCLI(args []string, stdin io.Reader, out io.Writer) error {
 	source := fs.String("source", "agent", "")
 	by := fs.String("by", "", "")
 	repo := fs.String("repo", "", "")
-	var prs, refs []string
+	var prs, refs, mcps []string
 	fs.Func("pr", "URL of a PR the session created; repeat to add more", func(v string) error { prs = append(prs, v); return nil })
 	fs.Func("ref", "URL of a PR the session referenced; repeat to add more", func(v string) error { refs = append(refs, v); return nil })
+	fs.Func("mcp", "name of an MCP server the session used; repeat to add more", func(v string) error { mcps = append(mcps, v); return nil })
 	// Allow flags after positional args: "note 12 text --by x".
 	var pos []string
 	rest := args[1:]
@@ -677,7 +679,7 @@ func runCLI(args []string, stdin io.Reader, out io.Writer) error {
 				p.Repo = repo
 			}
 		})
-		if len(prs) > 0 || len(refs) > 0 {
+		if len(prs) > 0 || len(refs) > 0 || len(mcps) > 0 {
 			t, err := st.Get(id)
 			if err != nil {
 				return err
@@ -696,12 +698,15 @@ func runCLI(args []string, stdin io.Reader, out io.Writer) error {
 			if len(refs) > 0 {
 				p.Refs = add(t.Refs, refs)
 			}
+			if len(mcps) > 0 {
+				p.MCPs = add(t.MCPs, mcps)
+			}
 		}
 		t, err := st.Update(id, p)
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(out, "#%d repo=%q prs=%q refs=%q\n", t.ID, t.Repo, strings.Join(t.PRs, " "), strings.Join(t.Refs, " "))
+		fmt.Fprintf(out, "#%d repo=%q prs=%q refs=%q mcps=%q\n", t.ID, t.Repo, strings.Join(t.PRs, " "), strings.Join(t.Refs, " "), strings.Join(t.MCPs, " "))
 	default:
 		return errors.New(usage)
 	}

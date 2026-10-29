@@ -135,6 +135,7 @@ screenshot: tickets/assets/1007.png   # optional
 repo: ~/Development/myapp   # optional: where the work happens, a directory or a repo URL
 prs: https://github.com/org/myapp/pull/12   # optional: PRs the session created, space-separated
 refs: https://github.com/org/lib/pull/3     # optional: PRs the session referenced, space-separated
+mcps: grafana claude_ai_Slack                # optional: MCP servers the session used, space-separated
 ---
 
 What the human wrote.
@@ -163,6 +164,7 @@ Images go in `tickets/assets/<id>.png`, then `<id>-2.png` and so on. The body li
 
 - When you start a ticket, set `status: doing` immediately. The human watches the board to see what is in progress. If you give the ticket to a subagent, set `doing` before you hand it over, or tell the subagent to set it first.
 - Add a note with your name when you start, for example `./.claudeweaver note 1007 "Started." --by claude`.
+- Each time you use a tool from an MCP server for the ticket, add the server name with `--mcp`, for example `./.claudeweaver set 1007 --mcp grafana`. The name is the middle part of the tool name `mcp__<server>__<tool>`. The panel shows the list as MCPs used.
 - When the work happens outside the board's own repo, set `repo` when you start. As you go, add each pull request that you open with `--pr`, and each one that you read, review or mention with `--ref`, for example `./.claudeweaver set 1007 --repo ~/Development/myapp --pr https://github.com/org/myapp/pull/12 --ref https://github.com/org/lib/pull/3`. Both add to their list and skip a PR that is already there. The ticket panel shows the repo, PRs created and PRs referenced.
 - Notes are append-only. Add a new note. Do not rewrite old notes.
 - Commit as you work, not at the end. Put the ticket id in the commit message, for example `settings: keep the save button above the footer (1007)`.

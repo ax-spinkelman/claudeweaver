@@ -844,7 +844,7 @@ body.selecting #columns { padding-bottom: 96px; }
     const text = (s, cls) => { const e = document.createElement(cls ? "code" : "span"); e.textContent = s; return e; };
     // Repo and PRs. Files can be edited by hand, so only http(s) values become links.
     const link = (href, label) => { if (!/^https?:\/\//.test(href)) return text(href, true); const a = document.createElement("a"); a.href = href; a.target = "_blank"; a.rel = "noopener"; a.textContent = label; return a; };
-    const work = $("#p-work"); work.innerHTML = ""; work.hidden = !t.repo && !t.prs?.length && !t.refs?.length;
+    const work = $("#p-work"); work.innerHTML = ""; work.hidden = !t.repo && !t.prs?.length && !t.refs?.length && !t.mcps?.length;
     if (t.repo) row("Repo", link(t.repo, t.repo.replace(/^https?:\/\/github\.com\//, "")), work);
     const prRow = (label, list) => list?.length && row(label, list.flatMap((u, i) => {
       const m = u.match(/github\.com\/[^/]+\/([^/]+)\/pull\/(\d+)/);
@@ -852,6 +852,7 @@ body.selecting #columns { padding-bottom: 96px; }
     }), work);
     prRow("PRs created", t.prs);
     prRow("PRs referenced", t.refs);
+    if (t.mcps?.length) row("MCPs used", t.mcps.flatMap((m, i) => [...(i ? [" · "] : []), text(m, true)]), work);
     if (t.url && /^https?:/.test(t.url)) { const a = document.createElement("a"); a.href = t.url; a.target = "_blank"; a.rel = "noopener"; a.textContent = t.url; row("Page", a); }
     if (t.selector) row("Element", text(t.selector, true));
     if (t.element_text) row("Text", text(t.element_text));

@@ -832,3 +832,26 @@ func TestPrompts(t *testing.T) {
 		t.Fatalf("prompt files listed as tickets: %d", len(ts))
 	}
 }
+
+func TestMCPs(t *testing.T) {
+	s := fixedStore(t)
+	writeFile(t, s, "0701-x.md", "---\nid: 701\ntitle: X\n---\n\nHello.\n")
+	got, err := s.Update(701, Patch{MCPs: &[]string{"grafana", "atlassian"}})
+	if err != nil || fmt.Sprint(got.MCPs) != "[grafana atlassian]" {
+		t.Fatalf("mcps %q %v", got.MCPs, err)
+	}
+	if !strings.Contains(readFile(t, s, "0701-x.md"), "mcps: grafana atlassian\n") {
+		t.Fatal("mcps line not written")
+	}
+	for _, bad := range []string{"two words", "<script>", ""} {
+		if _, err := s.Update(701, Patch{MCPs: &[]string{bad}}); err == nil {
+			t.Errorf("mcp %q accepted", bad)
+		}
+	}
+	if err := runCLI([]string{"set", "701", "--mcp", "grafana", "--mcp", "claude_ai_Slack", "--dir", s.Dir}, strings.NewReader(""), io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ = s.Get(701); fmt.Sprint(got.MCPs) != "[grafana atlassian claude_ai_Slack]" {
+		t.Fatalf("after set: %q", got.MCPs)
+	}
+}

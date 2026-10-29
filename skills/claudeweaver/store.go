@@ -53,6 +53,7 @@ type Ticket struct {
 	Repo        string            `json:"repo,omitempty"`     // where the work happens: a local directory or a repo URL
 	PRs         []string          `json:"prs,omitempty"`      // PRs the session created; one space-separated "prs:" line in the file
 	Refs        []string          `json:"refs,omitempty"`     // PRs the session referenced; one "refs:" line
+	MCPs        []string          `json:"mcps,omitempty"`     // MCP servers the session used; one "mcps:" line
 	Images      []string          `json:"images,omitempty"`   // "assets/<name>" paths: the screenshot field plus image links in the body
 	Extra       map[string]string `json:"extra,omitempty"`    // unknown frontmatter fields, read-only
 	Body        string            `json:"body"`               // markdown before "## Notes"
@@ -63,7 +64,7 @@ type Ticket struct {
 
 var knownKeys = map[string]bool{"id": true, "title": true, "type": true, "status": true, "priority": true,
 	"area": true, "created": true, "updated": true, "source": true, "url": true, "selector": true,
-	"element_text": true, "viewport": true, "device": true, "screen": true, "app": true, "ua": true, "screenshot": true, "repo": true, "prs": true, "refs": true}
+	"element_text": true, "viewport": true, "device": true, "screen": true, "app": true, "ua": true, "screenshot": true, "repo": true, "prs": true, "refs": true, "mcps": true}
 
 // ---- file format ----
 
@@ -284,7 +285,7 @@ func toTicket(name string, d *doc) Ticket {
 	t := Ticket{File: name, Title: f["title"], Type: f["type"], Status: f["status"], Priority: f["priority"],
 		Area: f["area"], Created: f["created"], Updated: f["updated"], Source: f["source"], URL: f["url"],
 		Selector: f["selector"], ElementText: f["element_text"], Viewport: f["viewport"], Device: f["device"], Screen: f["screen"], App: f["app"], UA: f["ua"],
-		Screenshot: f["screenshot"], Repo: f["repo"], PRs: strings.Fields(f["prs"]), Refs: strings.Fields(f["refs"])}
+		Screenshot: f["screenshot"], Repo: f["repo"], PRs: strings.Fields(f["prs"]), Refs: strings.Fields(f["refs"]), MCPs: strings.Fields(f["mcps"])}
 	t.ID, _ = strconv.Atoi(f["id"])
 	if t.ID <= 0 {
 		t.ID = idFromName(name)
@@ -599,6 +600,7 @@ type Patch struct {
 	Repo     *string   `json:"repo"`
 	PRs      *[]string `json:"prs"`  // PRs the session created; replaces the list
 	Refs     *[]string `json:"refs"` // PRs the session referenced; replaces the list
+	MCPs     *[]string `json:"mcps"` // MCP servers the session used; replaces the list
 }
 
 // prURL accepts http and https URLs only: the board renders each PR as a link.
@@ -610,13 +612,24 @@ func prURL(s string) error {
 	return nil
 }
 
-// prLine checks a PR list and joins it into one frontmatter value; nil stays nil (no change).
-func prLine(list *[]string) (*string, error) {
+var mcpNameRe = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)
+
+// mcpName accepts an MCP server name such as grafana or claude_ai_Slack.
+func mcpName(s string) error {
+	if !mcpNameRe.MatchString(s) {
+		return fmt.Errorf("bad MCP server name %q", s)
+	}
+	return nil
+}
+
+// listLine checks each item of a list and joins it into one space-separated frontmatter
+// value; nil stays nil (no change).
+func listLine(list *[]string, check func(string) error) (*string, error) {
 	if list == nil {
 		return nil, nil
 	}
-	for _, u := range *list {
-		if err := prURL(u); err != nil {
+	for _, v := range *list {
+		if err := check(v); err != nil {
 			return nil, err
 		}
 	}
@@ -647,11 +660,15 @@ func (s *Store) Update(id int, p Patch) (Ticket, error) {
 		r := cleanRepo(*p.Repo)
 		p.Repo = &r
 	}
-	prs, err := prLine(p.PRs)
+	prs, err := listLine(p.PRs, prURL)
 	if err != nil {
 		return Ticket{}, err
 	}
-	refs, err := prLine(p.Refs)
+	refs, err := listLine(p.Refs, prURL)
+	if err != nil {
+		return Ticket{}, err
+	}
+	mcps, err := listLine(p.MCPs, mcpName)
 	if err != nil {
 		return Ticket{}, err
 	}
@@ -659,7 +676,7 @@ func (s *Store) Update(id int, p Patch) (Ticket, error) {
 		for _, kv := range []struct {
 			k string
 			v *string
-		}{{"title", p.Title}, {"type", p.Type}, {"status", p.Status}, {"priority", p.Priority}, {"area", p.Area}, {"repo", p.Repo}, {"prs", prs}, {"refs", refs}} {
+		}{{"title", p.Title}, {"type", p.Type}, {"status", p.Status}, {"priority", p.Priority}, {"area", p.Area}, {"repo", p.Repo}, {"prs", prs}, {"refs", refs}, {"mcps", mcps}} {
 			if kv.v != nil {
 				d.set(kv.k, *kv.v)
 			}
