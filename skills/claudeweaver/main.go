@@ -139,10 +139,11 @@ func (s *server) event(format string, args ...any) {
 func changes(a, b Ticket) string {
 	var out []string
 	for _, f := range []struct{ k, a, b string }{{"status", a.Status, b.Status}, {"type", a.Type, b.Type},
-		{"priority", a.Priority, b.Priority}, {"area", a.Area, b.Area}, {"title", a.Title, b.Title}} {
+		{"priority", a.Priority, b.Priority}, {"area", a.Area, b.Area}, {"title", a.Title, b.Title},
+		{"repo", a.Repo, b.Repo}, {"prs", strings.Join(a.PRs, " "), strings.Join(b.PRs, " ")}} {
 		if f.a != f.b {
 			v := f.b
-			if f.k == "title" {
+			if f.k == "title" || f.k == "repo" || f.k == "prs" {
 				v = strconv.Quote(v)
 			}
 			out = append(out, f.k+"="+v)
@@ -535,6 +536,7 @@ const usage = `usage:
   claudeweaver new --title "..." [--type bug] [--area web] [--priority p2] [--status todo] [--body - | --body "text"]
   claudeweaver mv <id> <status>
   claudeweaver note <id> "text" [--by name]
+  claudeweaver set <id> [--repo ~/Development/app | --repo https://github.com/org/app] [--pr URL]...   (--pr adds to the list)
   claudeweaver [-addr :8090] [-dir tickets] [-areas web,server,docs,infra] [-tailnet-host name]     (serve the board)
 All commands take --dir and --areas.`
 
@@ -550,6 +552,9 @@ func runCLI(args []string, stdin io.Reader, out io.Writer) error {
 	body := fs.String("body", "", `body text, or "-" to read stdin`)
 	source := fs.String("source", "agent", "")
 	by := fs.String("by", "", "")
+	repo := fs.String("repo", "", "")
+	var prs []string
+	fs.Func("pr", "pull request URL; repeat to add more", func(v string) error { prs = append(prs, v); return nil })
 	// Allow flags after positional args: "note 12 text --by x".
 	var pos []string
 	rest := args[1:]
@@ -633,6 +638,35 @@ func runCLI(args []string, stdin io.Reader, out io.Writer) error {
 			return err
 		}
 		fmt.Fprintf(out, "noted on #%d\n", id)
+	case "set":
+		id, err := needID(1)
+		if err != nil {
+			return err
+		}
+		var p Patch
+		fs.Visit(func(f *flag.Flag) {
+			if f.Name == "repo" {
+				p.Repo = repo
+			}
+		})
+		if len(prs) > 0 {
+			t, err := st.Get(id)
+			if err != nil {
+				return err
+			}
+			list := t.PRs
+			for _, u := range prs {
+				if !slices.Contains(list, u) {
+					list = append(list, u)
+				}
+			}
+			p.PRs = &list
+		}
+		t, err := st.Update(id, p)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(out, "#%d repo=%q prs=%q\n", t.ID, t.Repo, strings.Join(t.PRs, " "))
 	default:
 		return errors.New(usage)
 	}

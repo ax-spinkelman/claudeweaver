@@ -709,3 +709,33 @@ func TestNoteMessages(t *testing.T) {
 		t.Fatalf("with a resolution:\n%q\nwant:\n%q", got.Messages, want)
 	}
 }
+
+func TestRepoAndPRs(t *testing.T) {
+	s := fixedStore(t)
+	writeFile(t, s, "0501-x.md", "---\nid: 501\ntitle: X\n---\n\nHello.\n")
+	pr1, pr2, pr3 := "https://github.com/PatchSimple/ax-vuln-sync/pull/865", "https://github.com/PatchSimple/webserver/pull/6500", "https://github.com/PatchSimple/api/pull/2832"
+	repo := "~/Development/ax-vuln-sync"
+	got, err := s.Update(501, Patch{Repo: &repo, PRs: &[]string{pr1, pr2}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Repo != repo || fmt.Sprint(got.PRs) != fmt.Sprint([]string{pr1, pr2}) {
+		t.Fatalf("repo %q prs %q", got.Repo, got.PRs)
+	}
+	if f := readFile(t, s, "0501-x.md"); !strings.Contains(f, "repo: "+repo+"\n") || !strings.Contains(f, "prs: "+pr1+" "+pr2+"\n") {
+		t.Fatalf("file:\n%s", f)
+	}
+	for _, bad := range []string{"javascript:alert(1)", "not a url", "https://github.com/a b"} {
+		if _, err := s.Update(501, Patch{PRs: &[]string{bad}}); err == nil {
+			t.Errorf("PR %q accepted", bad)
+		}
+	}
+
+	// The CLI adds PRs to the list and skips ones already there.
+	if err := runCLI([]string{"set", "501", "--pr", pr1, "--pr", pr3, "--dir", s.Dir}, strings.NewReader(""), io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ = s.Get(501); fmt.Sprint(got.PRs) != fmt.Sprint([]string{pr1, pr2, pr3}) || got.Repo != repo {
+		t.Fatalf("after set: repo %q prs %q", got.Repo, got.PRs)
+	}
+}
