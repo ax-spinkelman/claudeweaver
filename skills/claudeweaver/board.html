@@ -600,6 +600,7 @@ body.selecting #columns { padding-bottom: 96px; }
   const esc = (s) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
   // Code, images and links become finished HTML held aside as \0<n>\0, so a later rule never
   // runs inside a tag or an attribute (a bare URL inside an alt text once broke out of it).
+  let ticketPRs = []; // the open ticket's prs and refs, so "#865" and "repo#865" in its text can link
   const inline = (s) => {
     const held = [], hold = (html) => `\0${held.push(html) - 1}\0`;
     const a = (url, text) => hold(`<a href="${url}" target="_blank" rel="noopener">${text}</a>`);
@@ -608,6 +609,12 @@ body.selecting #columns { padding-bottom: 96px; }
       .replace(/!\[([^\]]*)\]\((assets\/[\w.-]+)\)/g, (_, alt, src) => hold(`<img alt="${alt}" src="/${src}">`))
       .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, (_, text, url) => a(url, text))
       .replace(/(^|[\s(])(https?:\/\/[^\s<]+[^\s<.,;:!?)'"*])/g, (_, pre, url) => pre + a(url, url)) // bare URLs, as on GitHub
+      // PR references. "&" is left out before them so the apostrophe entity &#39; never matches.
+      .replace(/(^|[^\w/&.-])([A-Za-z0-9-]+)\/([A-Za-z0-9._-]+)#(\d+)\b/g, (_, pre, o, r, n) => pre + a(`https://github.com/${o}/${r}/pull/${n}`, `${o}/${r}#${n}`))
+      .replace(/(^|[^\w/&.-])([A-Za-z0-9._-]+)?#(\d+)\b/g, (all, pre, repo, n) => {
+        const hit = ticketPRs.filter((u) => u.endsWith(`/pull/${n}`) && (!repo || u.split("/")[4] === repo));
+        return hit.length === 1 ? pre + a(hit[0], all.slice(pre.length)) : all; // only a PR the ticket names, never a guess
+      })
       .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
       .replace(/(^|[^*])\*([^*\s][^*]*)\*/g, "$1<em>$2</em>")
       .replace(/\0(\d+)\0/g, (_, i) => held[i]);
@@ -720,8 +727,9 @@ body.selecting #columns { padding-bottom: 96px; }
   };
   function renderNotes(t) {
     const box = $("#p-notes");
-    if (box.dataset.notes === t.notes) return; // a refresh with no new note keeps the search position
-    box.dataset.notes = t.notes;
+    const key = t.notes + "\n" + ticketPRs.join(" "); // new PRs can turn "#865" into a link
+    if (box.dataset.notes === key) return; // a refresh with no new note keeps the search position
+    box.dataset.notes = key;
     box.innerHTML = t.messages?.length ? t.messages.map(turn).join("") : '<div class="empty">No notes yet.</div>';
     if (searching) runSearch(true);
   }
@@ -823,7 +831,7 @@ body.selecting #columns { padding-bottom: 96px; }
 
   const setVal = (el, v) => { if (el.value !== v) el.value = v; }; // keeps the caret when nothing changed
   function fill(t) {
-    loaded = t; touched.clear();
+    loaded = t; touched.clear(); ticketPRs = [...(t.prs || []), ...(t.refs || [])];
     $("#p-done").hidden = t.status === "done";
     $("#p-id").textContent = "#" + t.id;
     $("#p-file").textContent = t.file;

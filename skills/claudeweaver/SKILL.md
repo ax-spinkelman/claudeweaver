@@ -199,6 +199,7 @@ Images go in `tickets/assets/<id>.png`, then `<id>-2.png` and so on. The body li
 - Do not use em-dashes, semicolons or emoji.
 - Do not use filler words such as "simply", "robust" or "seamlessly". State facts and numbers.
 - Write code, commands, file paths and error text exactly, in backticks. Put command output and code of more than one line in a ``` block. A ```diff block colors the added and removed lines.
+- Write a pull request as its full link or as `owner/repo#N`, for example `PatchSimple/webserver#6500`. The board links both. It also links `#N` and `repo#N` when the PR is in the ticket's `prs` or `refs`.
 - Define a term the first time you use it, in a few words.
 
 ## Watch loop for agents
