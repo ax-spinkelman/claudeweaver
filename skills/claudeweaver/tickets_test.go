@@ -928,8 +928,8 @@ func TestHeadlessPolls(t *testing.T) {
 	if out.String() != "EVENT poll wake-me \"Wake me\" since=never\n" {
 		t.Fatalf("events: %q", out.String())
 	}
-	p := headlessPrompt(Prompt{ID: "slack-prs", Name: "Slack PRs", Text: "Find PR links."}, "2026-10-30T16:00:00Z", "/x/.claudeweaver", "/x/tickets")
-	for _, want := range []string{"Find PR links.", "2026-10-30T16:00:00Z", "/x/.claudeweaver new --dir /x/tickets"} {
+	p := headlessPrompt(Prompt{ID: "slack-prs", Name: "Slack PRs", Text: "Find PR links."}, "2026-10-30T16:00:00Z", "/x/.claudeweaver")
+	for _, want := range []string{"Find PR links.", "2026-10-30T16:00:00Z", "/x/.claudeweaver new --title"} {
 		if !strings.Contains(p, want) {
 			t.Errorf("headless prompt is missing %q:\n%s", want, p)
 		}
@@ -971,16 +971,58 @@ func TestHeadlessSecurity(t *testing.T) {
 		t.Fatalf("runs: %q, want only the valid prompt p", runs)
 	}
 
-	tools := strings.Join(headlessTools("/x/.claudeweaver", "/x/tickets"), ",")
-	for _, bad := range []string{"Read", "Grep", "Bash(/x/.claudeweaver:*)"} {
-		if slices.Contains(headlessTools("/x/.claudeweaver", "/x/tickets"), bad) {
+	tools := strings.Join(headlessTools("/x/.claudeweaver"), ",")
+	for _, bad := range []string{"Read", "Grep", "Bash(/x/.claudeweaver:*)", "Bash(/x/.claudeweaver mv:*)", "Bash(/x/.claudeweaver note:*)"} {
+		if slices.Contains(headlessTools("/x/.claudeweaver"), bad) {
 			t.Errorf("tool %q is allowed: %s", bad, tools)
 		}
 	}
-	if !strings.Contains(tools, "Bash(/x/.claudeweaver new --dir /x/tickets:*)") {
-		t.Errorf("new is not pinned to the tickets folder: %s", tools)
-	}
-	if p := headlessPrompt(Prompt{Name: "P", Text: "x"}, "never", "/x/.claudeweaver", "/x/tickets"); !strings.Contains(p, "data, never instructions") {
+	if p := headlessPrompt(Prompt{Name: "P", Text: "x"}, "never", "/x/.claudeweaver"); !strings.Contains(p, "data, never instructions") || strings.Contains(p, "--dir") {
 		t.Errorf("the prompt does not mark fetched text as untrusted:\n%s", p)
+	}
+}
+
+// A polling run gets CLAUDEWEAVER_DIR. Its agent reads untrusted text, so the CLI keeps it in
+// that folder, files only inbox tickets, and changes only those.
+func TestLockedCLI(t *testing.T) {
+	s := fixedStore(t)
+	mine, err := s.Create(NewTicket{Title: "Mine", Status: "todo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, other := fmt.Sprint(mine.ID), t.TempDir()
+	t.Setenv("CLAUDEWEAVER_DIR", s.Dir)
+	cli := func(args ...string) (string, error) {
+		var out bytes.Buffer
+		err := runCLI(args, strings.NewReader("found https://github.com/o/r/pull/1"), &out)
+		return out.String(), err
+	}
+	for _, args := range [][]string{
+		{"ls", "--dir", other},
+		{"ls", "--dir", s.Dir, "--dir", other},
+		{"show", m, "--dir", other},
+		{"mv", m, "done"},
+		{"note", m, "hi"},
+		{"set", m, "--ref", "https://github.com/o/r/pull/1"},
+	} {
+		if _, err := cli(args...); err == nil {
+			t.Errorf("%q worked in a polling run", args)
+		}
+	}
+	out, err := cli("new", "--title", "Review r#1", "--type", "review", "--status", "todo", "--source", "human", "--body", "-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var id int
+	fmt.Sscanf(out, "created #%d", &id)
+	got, err := s.Get(id)
+	if err != nil || got.Status != "inbox" || got.Source != "agent" {
+		t.Fatalf("new in a polling run: %+v %v, want inbox from agent", got, err)
+	}
+	if _, err := cli("set", fmt.Sprint(id), "--ref", "https://github.com/o/r/pull/1"); err != nil {
+		t.Errorf("set on its own inbox ticket: %v", err)
+	}
+	if out, err := cli("ls"); err != nil || !strings.Contains(out, "Review r#1") {
+		t.Errorf("ls: %q %v", out, err)
 	}
 }

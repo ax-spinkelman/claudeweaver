@@ -204,26 +204,26 @@ func runHeadless(st *Store, p Prompt, since string) {
 	defer f.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, claude, "-p", headlessPrompt(p, since, cli, dir), "--model="+p.Model, "--allowedTools", strings.Join(headlessTools(cli, dir), ","))
+	cmd := exec.CommandContext(ctx, claude, "-p", headlessPrompt(p, since, cli), "--model="+p.Model, "--allowedTools", strings.Join(headlessTools(cli), ","))
 	cmd.Dir, cmd.Stdout, cmd.Stderr = root, f, f
+	cmd.Env = append(os.Environ(), "CLAUDEWEAVER_DIR="+dir) // locks the CLI, see runCLI
 	err = cmd.Run()
 	log.Printf("polling prompt %s ran headless with %s: %v, log %s", p.ID, p.Model, errors.Join(err, ctx.Err()), logPath)
 }
 
 // headlessTools is all a polling run may use. The run reads untrusted text (Slack, PRs), so it
-// gets no file Read or Grep, and the board CLI only as ls/new pinned to the tickets folder
-// plus show/set, which touch ticket files only.
+// gets no file Read or Grep, and the board CLI only as ls, show, new and set. CLAUDEWEAVER_DIR
+// fixes the folder and limits those commands (runCLI), so the rules need no flags.
 // ponytail: one fixed list for every polling prompt; add a per-prompt tools: field when a prompt needs more
-func headlessTools(cli, dir string) []string {
-	return []string{"Bash(" + cli + " ls --dir " + dir + ":*)", "Bash(" + cli + " show:*)",
-		"Bash(" + cli + " new --dir " + dir + ":*)", "Bash(" + cli + " set:*)",
+func headlessTools(cli string) []string {
+	return []string{"Bash(" + cli + " ls:*)", "Bash(" + cli + " show:*)", "Bash(" + cli + " new:*)", "Bash(" + cli + " set:*)",
 		"Bash(gh pr view:*)", "Bash(gh pr list:*)",
 		"mcp__claude_ai_Slack__slack_search_public_and_private", "mcp__claude_ai_Slack__slack_search_channels",
 		"mcp__claude_ai_Slack__slack_read_channel", "mcp__claude_ai_Slack__slack_read_thread"}
 }
 
 // headlessPrompt wraps the human's prompt text with the window and the board's ticket rules.
-func headlessPrompt(p Prompt, since, cli, dir string) string {
+func headlessPrompt(p Prompt, since, cli string) string {
 	if since == "never" {
 		since = "never (this is the first run: look back 14 days)"
 	}
@@ -235,11 +235,11 @@ The task, written by the human:
 %s
 
 Rules:
-- File a ticket only for each new thing you find. Before you file one, run %s ls --dir %s, and %s show <id> --dir %s for any ticket that may have it. Skip anything a ticket already has.
-- File with: %s new --dir %s --title "..." --type <type> --status <status> --body - (the body on stdin: what you found, where, and the link). Use the status and type the task asks for, or inbox and bug.
-- Then add the fields: %s set <id> --dir %s --ref <PR URL> --repo <repo URL> --mcp <server you used>.
+- File a ticket only for each new thing you find. Before you file one, run %s ls, and %s show <id> for any ticket that may have it. Skip anything a ticket already has.
+- File with: %s new --title "..." --type <type> --body - (the body on stdin: what you found, where, and the link). Use the type the task asks for, or bug. Tickets from a poll always go to inbox.
+- Then add the fields: %s set <id> --ref <PR URL> --repo <repo URL> --mcp <server you used>.
 - When there is nothing new, file nothing. End with one line: the tickets you filed, or "nothing new".`,
-		p.Name, since, p.Text, cli, dir, cli, dir, cli, dir, cli, dir)
+		p.Name, since, p.Text, cli, cli, cli, cli)
 }
 
 // changes lists the fields that differ, for the "updated" event line.
@@ -727,6 +727,24 @@ func runCLI(args []string, stdin io.Reader, out io.Writer) error {
 		pos = append(pos, fs.Arg(0))
 		rest = fs.Args()[1:]
 	}
+	// A polling run (runHeadless) sets CLAUDEWEAVER_DIR. Its agent reads untrusted text, so the
+	// folder is fixed and it may only list, read, file inbox tickets and add fields to those.
+	locked, isLocked := os.LookupEnv("CLAUDEWEAVER_DIR")
+	if isLocked {
+		dirSet := false
+		fs.Visit(func(f *flag.Flag) { dirSet = dirSet || f.Name == "dir" })
+		if dirSet || !filepath.IsAbs(locked) {
+			return errors.New("a polling run has a fixed tickets folder: leave out --dir")
+		}
+		*dir = locked
+		switch args[0] {
+		case "new":
+			*status, *source = "inbox", "agent"
+		case "ls", "show", "set":
+		default:
+			return errors.New("a polling run may only use ls, show, new and set")
+		}
+	}
 	setAreas(*areas)
 	st := NewStore(*dir)
 	needID := func(n int) (int, error) {
@@ -801,6 +819,11 @@ func runCLI(args []string, stdin io.Reader, out io.Writer) error {
 		id, err := needID(1)
 		if err != nil {
 			return err
+		}
+		if isLocked {
+			if t, err := st.Get(id); err != nil || t.Status != "inbox" || t.Source != "agent" {
+				return fmt.Errorf("a polling run may only change the inbox tickets it filed, not #%d", id)
+			}
 		}
 		var p Patch
 		fs.Visit(func(f *flag.Flag) {
