@@ -277,6 +277,7 @@ body.selecting #columns { padding-bottom: 96px; }
       <label class="label">Repo<input class="field" id="rp-repo" placeholder="~/Development/app or https://github.com/org/app"></label>
     </div>
     <label class="label" id="rp-every-row">Poll every (minutes)<input class="field" id="rp-every" type="number" min="1" step="1" required></label>
+    <label class="label" id="rp-model-row">Run with<select class="field" id="rp-model"><option value="">This board's agent (wakes its session)</option><option value="haiku">haiku, headless</option><option value="sonnet">sonnet, headless</option><option value="opus">opus, headless</option></select></label>
     <label class="label">Prompt<textarea class="field" id="rp-text" placeholder="What the agent does each time you run this. Markdown works."></textarea></label>
     <div class="actions"><span class="msg err" id="rp-err" role="alert"></span><button type="button" class="btn" id="rp-cancel">Cancel</button><button class="btn primary">Save</button></div>
   </form>
@@ -929,7 +930,7 @@ body.selecting #columns { padding-bottom: 96px; }
         const li = document.createElement("li"), name = document.createElement("span"), when = document.createElement("span");
         name.className = "rp-name"; name.textContent = p.name; name.title = p.text;
         when.className = "rp-when";
-        when.textContent = poll ? `every ${p.every} min · ` + (p.last_run ? "polled " + ago(p.last_run) : "not polled yet")
+        when.textContent = poll ? `every ${p.every} min · ${p.model || "wakes the agent"} · ` + (p.last_run ? "polled " + ago(p.last_run) : "not polled yet")
           : p.last_run ? "ran " + ago(p.last_run) : "never run";
         if (p.last_run) when.title = new Date(p.last_run).toLocaleString();
         li.append(name, when, btn("Edit", () => editPrompt(p)),
@@ -953,6 +954,7 @@ body.selecting #columns { padding-bottom: 96px; }
     editing = p?.id || null; polling = poll;
     $("#rp-name").value = p?.name || ""; $("#rp-type").value = p?.type || ""; $("#rp-repo").value = p?.repo || ""; $("#rp-text").value = p?.text || "";
     $("#rp-every-row").hidden = !poll; $("#rp-every").disabled = !poll; $("#rp-every").value = p?.every || 30;
+    $("#rp-model-row").hidden = !poll; $("#rp-model").value = p?.model || "";
     $("#rp-err").textContent = ""; $("#rp-dialog").showModal(); $("#rp-name").focus();
   }
   $("#rp-new").onclick = () => editPrompt(null, false);
@@ -960,7 +962,7 @@ body.selecting #columns { padding-bottom: 96px; }
   $("#rp-cancel").onclick = () => $("#rp-dialog").close();
   $("#rp-form").addEventListener("submit", async (e) => {
     e.preventDefault();
-    const body = { name: $("#rp-name").value, type: $("#rp-type").value, repo: $("#rp-repo").value, text: $("#rp-text").value, every: polling ? Number($("#rp-every").value) : 0 };
+    const body = { name: $("#rp-name").value, type: $("#rp-type").value, repo: $("#rp-repo").value, text: $("#rp-text").value, every: polling ? Number($("#rp-every").value) : 0, model: polling ? $("#rp-model").value : "" };
     try { await api(editing ? "PUT" : "POST", editing ? `/api/prompts/${editing}` : "/api/prompts", body); $("#rp-dialog").close(); loadPrompts(); }
     catch (err) { $("#rp-err").textContent = err.message; }
   });

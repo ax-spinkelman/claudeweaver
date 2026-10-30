@@ -109,6 +109,8 @@ The human keeps prompts that they run every few days in the toolbox at the botto
 
 A polling prompt is the same file with `every: N` (minutes). The board runs it on its own timer and files no ticket for it. When one is due, the board prints `EVENT poll <id> "<name>" since=<time of the previous poll, or never>`. When that line wakes you, read `tickets/prompts/<id>.md` and do what its text says, looking back to `since`. File a ticket only for each new thing you find, and skip anything a ticket already has, for example a PR already in `prs` or `refs`. When you find nothing new, file nothing and add no note.
 
+A polling prompt with `model: <name>`, for example `model: haiku`, does not wake you. The board runs it in its own `claude -p --model <name>` from the repo root, with only the Slack read tools, `gh pr view`, `gh pr list` and the board CLI allowed. That run files tickets with the CLI, so they print no `EVENT` line, and its output goes to `.claudeweaver-runs/<id>-<time>.log`. Use it for polls that run often, because each poll in a long watcher session costs the whole session context per call.
+
 ## Ticket format
 
 The file name is `tickets/<id>-<slug>.md`, for example `tickets/1007-save-button-overlaps-footer.md`. Ids from the tool start at 1000. Lower ids are free for tickets made by hand.

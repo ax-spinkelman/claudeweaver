@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	_ "embed"
 	"encoding/json"
 	"errors"
@@ -15,10 +16,12 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -152,9 +155,78 @@ func pollDue(st *Store, events io.Writer) error {
 		if err != nil {
 			return err
 		}
+		if p.Model != "" { // runs on its own; waking the watcher costs its whole context per call
+			startHeadless(st, p, sinceOrNever(prev))
+			continue
+		}
 		fmt.Fprintf(events, "EVENT %s\n", pollEvent(p, prev))
 	}
 	return err
+}
+
+// startHeadless runs a polling prompt in its own short-lived claude -p. Tests replace it.
+var startHeadless = func(st *Store, p Prompt, since string) { go runHeadless(st, p, since) }
+
+var headlessRunning sync.Map // prompt id -> true while its run is going
+
+// runHeadless runs claude -p for prompt p from the repo root (the parent of the tickets
+// folder), with only the read tools a poll needs and the board's own CLI. The output goes to
+// .claudeweaver-runs/<id>-<time>.log. The run files tickets with the CLI, which prints no
+// EVENT line, so a poll never wakes the watcher session.
+func runHeadless(st *Store, p Prompt, since string) {
+	if _, busy := headlessRunning.LoadOrStore(p.ID, true); busy {
+		log.Printf("polling prompt %s: the last run is still going, skipped", p.ID)
+		return
+	}
+	defer headlessRunning.Delete(p.ID)
+	dir, err := filepath.Abs(st.Dir)
+	cli, err2 := os.Executable()
+	claude, err3 := exec.LookPath("claude")
+	if err = errors.Join(err, err2, err3); err != nil {
+		log.Printf("polling prompt %s: %v", p.ID, err)
+		return
+	}
+	root := filepath.Dir(dir)
+	logPath := filepath.Join(root, ".claudeweaver-runs", fmt.Sprintf("%s-%s.log", p.ID, time.Now().UTC().Format("20060102T150405Z")))
+	if err := os.MkdirAll(filepath.Dir(logPath), 0o755); err != nil {
+		log.Printf("polling prompt %s: %v", p.ID, err)
+		return
+	}
+	f, err := os.Create(logPath)
+	if err != nil {
+		log.Printf("polling prompt %s: %v", p.ID, err)
+		return
+	}
+	defer f.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+	defer cancel()
+	// ponytail: one fixed tool list for every polling prompt; add a per-prompt tools: field when a prompt needs more
+	tools := []string{"Read", "Grep", "Bash(" + cli + ":*)", "Bash(gh pr view:*)", "Bash(gh pr list:*)",
+		"mcp__claude_ai_Slack__slack_search_public_and_private", "mcp__claude_ai_Slack__slack_search_channels",
+		"mcp__claude_ai_Slack__slack_read_channel", "mcp__claude_ai_Slack__slack_read_thread"}
+	cmd := exec.CommandContext(ctx, claude, "-p", headlessPrompt(p, since, cli, dir), "--model", p.Model, "--allowedTools", strings.Join(tools, ","))
+	cmd.Dir, cmd.Stdout, cmd.Stderr = root, f, f
+	err = cmd.Run()
+	log.Printf("polling prompt %s ran headless with %s: %v, log %s", p.ID, p.Model, errors.Join(err, ctx.Err()), logPath)
+}
+
+// headlessPrompt wraps the human's prompt text with the window and the board's ticket rules.
+func headlessPrompt(p Prompt, since, cli, dir string) string {
+	if since == "never" {
+		since = "never (this is the first run: look back 14 days)"
+	}
+	return fmt.Sprintf(`You run the polling prompt %q for a claudeweaver ticket board. Nobody is watching, so do not ask questions.
+The previous run was at %s. Look only at what is new since then.
+
+The task, written by the human:
+%s
+
+Rules:
+- File a ticket only for each new thing you find. Before you file one, run %s ls --dir %s and grep the files in %s for the URL, and skip anything a ticket already has.
+- File with: %s new --dir %s --title "..." --type <type> --status <status> --body - (the body on stdin: what you found, where, and the link). Use the status and type the task asks for, or inbox and bug.
+- Then add the fields: %s set <id> --dir %s --ref <PR URL> --repo <repo URL> --mcp <server you used>.
+- When there is nothing new, file nothing. End with one line: the tickets you filed, or "nothing new".`,
+		p.Name, since, p.Text, cli, dir, dir, cli, dir, cli, dir)
 }
 
 // changes lists the fields that differ, for the "updated" event line.
@@ -745,8 +817,13 @@ func runCLI(args []string, stdin io.Reader, out io.Writer) error {
 // pollEvent is the poll line after "EVENT ": since is the previous poll, so the agent
 // knows how far back to look.
 func pollEvent(p Prompt, prev string) string {
+	return fmt.Sprintf("poll %s %q since=%s", p.ID, p.Name, sinceOrNever(prev))
+}
+
+// sinceOrNever names the previous poll, or "never" before the first one.
+func sinceOrNever(prev string) string {
 	if prev == "" {
-		prev = "never"
+		return "never"
 	}
-	return fmt.Sprintf("poll %s %q since=%s", p.ID, p.Name, prev)
+	return prev
 }

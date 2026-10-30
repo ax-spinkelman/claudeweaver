@@ -901,3 +901,36 @@ func TestPollingPrompts(t *testing.T) {
 		t.Fatalf("last_run not stamped: %+v", ps)
 	}
 }
+
+func TestHeadlessPolls(t *testing.T) {
+	s := fixedStore(t)
+	if _, err := s.SavePrompt("", PromptInput{Name: "Slack PRs", Every: 10, Model: "haiku", Text: "Find PR links."}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.SavePrompt("", PromptInput{Name: "Wake me", Every: 10, Text: "x"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.SavePrompt("", PromptInput{Name: "Bad", Every: 10, Model: "haiku; rm -rf /"}); err == nil {
+		t.Error("bad model name accepted")
+	}
+	var runs []string
+	defer func(f func(*Store, Prompt, string)) { startHeadless = f }(startHeadless)
+	startHeadless = func(_ *Store, p Prompt, since string) { runs = append(runs, p.ID+" "+p.Model+" "+since) }
+
+	var out bytes.Buffer
+	if err := pollDue(s, &out); err != nil {
+		t.Fatal(err)
+	}
+	if fmt.Sprint(runs) != "[slack-prs haiku never]" {
+		t.Fatalf("headless runs: %q", runs)
+	}
+	if out.String() != "EVENT poll wake-me \"Wake me\" since=never\n" {
+		t.Fatalf("events: %q", out.String())
+	}
+	p := headlessPrompt(Prompt{ID: "slack-prs", Name: "Slack PRs", Text: "Find PR links."}, "2026-10-30T16:00:00Z", "/x/.claudeweaver", "/x/tickets")
+	for _, want := range []string{"Find PR links.", "2026-10-30T16:00:00Z", "/x/.claudeweaver new --dir /x/tickets"} {
+		if !strings.Contains(p, want) {
+			t.Errorf("headless prompt is missing %q:\n%s", want, p)
+		}
+	}
+}

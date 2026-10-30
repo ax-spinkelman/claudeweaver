@@ -55,7 +55,7 @@ On the board, N opens quick add, J and K move between cards, and keys 1 to 6 mov
 
 The notes of a ticket read as a conversation. Your notes are in a shaded box with a `❯` mark, and agent notes have a `●` mark. Notes take Markdown, with ``` code blocks in a monospace font. Cmd+Enter sends a note. Cmd+F searches the notes of the open ticket, and Esc ends the search.
 
-On a wide screen the ticket panel stays docked on the right. Along the bottom of the board is a toolbox with recurring prompts: prompts you write once and run every few days, such as "do the observability checks". Each one shows when it last ran. Run files the prompt as a `todo` ticket, and the agent works it like any other. Each prompt is a Markdown file in `tickets/prompts/`. A polling prompt runs by itself every N minutes: the board wakes the agent, and the agent files tickets only for what it finds, for example one review ticket per new PR link in Slack.
+On a wide screen the ticket panel stays docked on the right. Along the bottom of the board is a toolbox with recurring prompts: prompts you write once and run every few days, such as "do the observability checks". Each one shows when it last ran. Run files the prompt as a `todo` ticket, and the agent works it like any other. Each prompt is a Markdown file in `tickets/prompts/`. A polling prompt runs by itself every N minutes: the board wakes the agent, and the agent files tickets only for what it finds, for example one review ticket per new PR link in Slack. Choose a model under "Run with", for example haiku, and the board runs the poll in its own short `claude -p` instead, which costs far fewer tokens than waking a long session.
 
 ### The overlay
 

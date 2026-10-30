@@ -843,15 +843,18 @@ type Prompt struct {
 	Repo    string `json:"repo,omitempty"`
 	LastRun string `json:"last_run,omitempty"`
 	Every   int    `json:"every,omitempty"` // minutes between polls; 0 is a recurring prompt you run by hand
+	Model   string `json:"model,omitempty"` // set on a polling prompt: run it in a headless claude -p with this model
 	Text    string `json:"text"`
 }
 
 type PromptInput struct {
-	Name, Type, Repo, Text string
-	Every                  int
+	Name, Type, Repo, Text, Model string
+	Every                         int
 }
 
 var promptID = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
+
+var modelName = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]*$`)
 
 func (s *Store) promptPath(id string) (string, error) {
 	if !promptID.MatchString(id) {
@@ -864,6 +867,7 @@ func toPrompt(id string, d *doc) Prompt {
 	f := d.fields()
 	p := Prompt{ID: id, Name: f["name"], Type: f["type"], Repo: f["repo"], LastRun: f["last_run"], Text: strings.Trim(d.body, "\n")}
 	p.Every, _ = strconv.Atoi(f["every"])
+	p.Model = f["model"]
 	def(&p.Name, id)
 	return p
 }
@@ -913,6 +917,9 @@ func (s *Store) SavePrompt(id string, in PromptInput) (Prompt, error) {
 	if in.Every < 0 {
 		return Prompt{}, errors.New("poll interval must be 0 (run by hand) or more minutes")
 	}
+	if in.Model != "" && !modelName.MatchString(in.Model) { // passed to claude as one argument
+		return Prompt{}, fmt.Errorf("bad model %q: want a name such as haiku or claude-haiku-5-5", in.Model)
+	}
 	if in.Type != "" {
 		if err := oneOf("type", in.Type, Types); err != nil {
 			return Prompt{}, err
@@ -942,7 +949,7 @@ func (s *Store) SavePrompt(id string, in PromptInput) (Prompt, error) {
 	if in.Every > 0 {
 		every = strconv.Itoa(in.Every)
 	}
-	for _, kv := range [][2]string{{"name", name}, {"type", in.Type}, {"repo", cleanRepo(in.Repo)}, {"every", every}} {
+	for _, kv := range [][2]string{{"name", name}, {"type", in.Type}, {"repo", cleanRepo(in.Repo)}, {"every", every}, {"model", in.Model}} {
 		d.set(kv[0], kv[1])
 	}
 	if text := strings.Trim(in.Text, "\n"); text != "" {
