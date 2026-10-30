@@ -725,7 +725,7 @@ func TestRepoAndPRs(t *testing.T) {
 	if f := readFile(t, s, "0501-x.md"); !strings.Contains(f, "repo: "+repo+"\n") || !strings.Contains(f, "prs: "+pr1+" "+pr2+"\n") {
 		t.Fatalf("file:\n%s", f)
 	}
-	for _, bad := range []string{"javascript:alert(1)", "not a url", "https://github.com/a b"} {
+	for _, bad := range []string{"javascript:alert(1)", "not a url", "https://github.com/a b", `https://github.com/a/b/pull/1"x`, "https://github.com/<b>"} {
 		if _, err := s.Update(501, Patch{PRs: &[]string{bad}}); err == nil {
 			t.Errorf("PR %q accepted", bad)
 		}

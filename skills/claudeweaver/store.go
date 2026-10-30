@@ -606,7 +606,7 @@ type Patch struct {
 // prURL accepts http and https URLs only: the board renders each PR as a link.
 func prURL(s string) error {
 	u, err := url.Parse(s)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || strings.ContainsAny(s, " \t\r\n") {
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || strings.ContainsAny(s, " \t\r\n\"'<>`") {
 		return fmt.Errorf("bad PR URL %q: want an http or https link", s)
 	}
 	return nil

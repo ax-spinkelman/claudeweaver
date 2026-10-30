@@ -831,7 +831,9 @@ body.selecting #columns { padding-bottom: 96px; }
 
   const setVal = (el, v) => { if (el.value !== v) el.value = v; }; // keeps the caret when nothing changed
   function fill(t) {
-    loaded = t; touched.clear(); ticketPRs = [...(t.prs || []), ...(t.refs || [])];
+    loaded = t; touched.clear();
+    // Files are not checked on read, so only a strict GitHub PR URL may become a link's href.
+    ticketPRs = [...(t.prs || []), ...(t.refs || [])].filter((u) => /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+$/.test(u));
     $("#p-done").hidden = t.status === "done";
     $("#p-id").textContent = "#" + t.id;
     $("#p-file").textContent = t.file;
