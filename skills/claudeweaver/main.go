@@ -31,6 +31,12 @@ var boardHTML string
 //go:embed devnotes.js
 var devnotesJS []byte
 
+// Literata (SIL OFL 1.1, fonts/OFL.txt): the reading font of the Legible themes, served by the
+// board so it works offline.
+//
+//go:embed fonts/literata.woff2
+var literataWOFF2 []byte
+
 const maxScreenshot = 5 << 20
 
 func main() {
@@ -276,6 +282,11 @@ func newServer(st *Store, unsafeAny bool, events io.Writer) http.Handler {
 		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Write(devnotesJS)
+	})
+	mux.HandleFunc("GET /fonts/literata.woff2", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "font/woff2")
+		w.Header().Set("Cache-Control", "max-age=31536000, immutable")
+		w.Write(literataWOFF2)
 	})
 	mux.Handle("GET /assets/", http.StripPrefix("/assets/", http.FileServer(http.Dir(filepath.Join(st.Dir, "assets")))))
 	mux.HandleFunc("GET /api/tickets", s.list)

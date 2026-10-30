@@ -13,7 +13,7 @@
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
+  :root:not([data-theme="light"]):not([data-theme^="legible"]) {
     --ink: #0F1019; --frost: #171925; --paper: #1D1F2D; --raspberry: #6F82FF; --cherry: #FF5A70;
     --graphite: #9499AD; --blocked: #FF7A7A; --line: #2A2D3E; --hover: #24273A; --selected: #262D55;
     --add: #3FB950; --del: #FF7B72; --find: #2E2914;
@@ -26,6 +26,24 @@
     --add: #3FB950; --del: #FF7B72; --find: #2E2914;
   --text: #E7E9F2; --shadow: none; --on-accent: #0F1019; color-scheme: dark;
 }
+/* Legible themes: warm colors and Literata for reading text. Picked in the header, saved per
+   browser. Ratios: Warm text 13.0:1 on page, Dark text 12.1:1. */
+@font-face { font-family: "Literata"; src: url("/fonts/literata.woff2") format("woff2"); font-weight: 200 900; font-display: swap; }
+:root[data-theme="legible-warm"] {
+  --ink: #2B2622; --frost: #F4EEE3; --paper: #FBF7EE; --raspberry: #2F45D0; --cherry: #C92A42;
+  --graphite: #6A5F53; --blocked: #B3261E; --line: #E0D6C5; --hover: #EBE3D3; --selected: #E4E1F1;
+  --add: #1A7F37; --del: #CF222E; --find: #FFF6D6;
+  --text: var(--ink); --on-accent: #fff; --shadow: 0 1px 2px rgba(43,38,34,.06); color-scheme: light;
+}
+:root[data-theme="legible-dark"] {
+  --ink: #120F0D; --frost: #1E1A17; --paper: #27221E; --raspberry: #93A2FF; --cherry: #FF6B80;
+  --graphite: #A99F91; --blocked: #FF8A80; --line: #3A332D; --hover: #302A25; --selected: #3A3558;
+  --add: #3FB950; --del: #FF7B72; --find: #2E2914;
+  --text: #E0D7C8; --on-accent: #14110F; --shadow: none; color-scheme: dark;
+}
+:root[data-theme^="legible"] .md { font: 16px/1.6 "Literata", ui-serif, Georgia, serif; }
+:root[data-theme^="legible"] .md :is(p, li, h3) { max-width: 66ch; }
+:root[data-theme^="legible"] .convo .meta { font-family: system-ui, sans-serif; }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
 body { background: var(--page); color: var(--text); font: 15px/1.47 system-ui, sans-serif; display: flex; flex-direction: column; }
@@ -243,6 +261,7 @@ body.selecting #columns { padding-bottom: 96px; }
 #lanes button[aria-current=true] .n { color: inherit; opacity: .8; }
 @media (prefers-reduced-motion: reduce) { #lanes button { transition: none; } }
 </style>
+<script>try { const t = localStorage.getItem("cw:theme"); if (t === "legible-warm" || t === "legible-dark") document.documentElement.dataset.theme = t; } catch {}</script>
 </head>
 <body>
 <header>
@@ -254,6 +273,7 @@ body.selecting #columns { padding-bottom: 96px; }
     <select class="field" id="f-prio" aria-label="Priority"><option value="">All priorities</option>{{range .Priorities}}<option>{{.}}</option>{{end}}</select>
     <label class="toggle"><input type="checkbox" id="f-closed"> Show won't fix</label>
   </div>
+  <select class="field" id="theme" aria-label="Theme" title="Theme, saved in this browser"><option value="">Standard</option><option value="legible-warm">Legible Warm</option><option value="legible-dark">Legible Dark</option></select>
   <button class="btn" id="select" aria-pressed="false">Select</button>
   <button class="btn primary" id="new" title="Shortcut: N">New ticket</button>
 </header>
@@ -909,6 +929,15 @@ body.selecting #columns { padding-bottom: 96px; }
     const text = $("#p-note").value.trim(); if (!text || !current) return;
     try { const t = await api("POST", `/api/tickets/${current}/notes`, { text, by: "human" }); $("#p-note").value = ""; renderNotes(t); newest(); if (!dirty) fill(t); refresh(); } // a reply can reopen it
     catch (err) { msg(err.message, true); }
+  };
+
+  // ---- theme. Standard follows the system's light or dark; the Legible themes are fixed. The <head>
+  // script applies the saved one before the first paint.
+  const theme = $("#theme");
+  theme.value = document.documentElement.dataset.theme || "";
+  theme.onchange = () => {
+    if (theme.value) document.documentElement.dataset.theme = theme.value; else delete document.documentElement.dataset.theme;
+    try { localStorage.setItem("cw:theme", theme.value); } catch {}
   };
 
   // ---- toolbox. A recurring prompt runs when you click Run and files a todo ticket. A polling

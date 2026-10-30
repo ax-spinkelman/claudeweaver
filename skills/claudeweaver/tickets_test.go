@@ -1026,3 +1026,10 @@ func TestLockedCLI(t *testing.T) {
 		t.Errorf("ls: %q %v", out, err)
 	}
 }
+
+func TestReadingFont(t *testing.T) {
+	r := do(newServer(fixedStore(t), false, io.Discard), "GET", "/fonts/literata.woff2", "", "")
+	if r.Code != http.StatusOK || r.Header().Get("Content-Type") != "font/woff2" || !strings.HasPrefix(r.Body.String(), "wOF2") {
+		t.Fatalf("font: %d %q %q", r.Code, r.Header().Get("Content-Type"), r.Body.String()[:min(4, r.Body.Len())])
+	}
+}
